@@ -4,15 +4,18 @@ Time-boxed so a demo exists by Day 5, then polish. Each day ends with something 
 
 ## Day 1 (Mon Jul 7) — Skeleton runs end-to-end on stubs
 - [x] Repo structure, docs, skill, schemas, CLI, loop skeleton (this scaffold)
-- [ ] `pip install -r requirements.txt` clean in a fresh venv
-- [ ] `ptd run examples/sample_protocol.md` runs through all stages on stubbed data
-- [ ] Wire `ANTHROPIC_API_KEY` + a smoke call to Claude
+- [x] `pip install -r requirements.txt` clean in a fresh venv
+- [x] Offline suite green (`pytest` — schemas + builtin gen/validate + extraction)
+- [x] `.env` loading wired into `cli.py` (dependency-free loader)
+- [ ] Wire `ANTHROPIC_API_KEY` + a smoke call to Claude — **needs the hackathon key**
 
 ## Day 2 (Tue Jul 8) — Real extraction
-- [ ] Implement `ingest.py` (pdf/html/md/txt → text)
-- [ ] Implement `extract.py`: Claude → `ProtocolDesign` using `prompts/extract_design.md`
-- [ ] Validate extraction on `sample_protocol.md`; hand-check the design JSON
-- [ ] `ptd extract` produces a correct design
+- [x] `ingest.py` (pdf/html/md/txt → text) — complete
+- [x] `extract.py`: Claude → `ProtocolDesign` via structured outputs (`messages.parse`),
+      with JSON-mode + one-shot repair fallback and DM/dedupe normalization
+- [x] Offline tests for all extraction paths (mocked LLM, no key)
+- [ ] Validate extraction on `sample_protocol.md`; hand-check the design JSON — **needs the key**
+- [ ] `ptd extract` produces a correct design — **needs the key**
 
 ## Day 3 (Wed Jul 9) — Real generation (builtin backend)
 - [ ] Implement `generate.py` builtin: DM → VS → AE → LB → QS → EX
