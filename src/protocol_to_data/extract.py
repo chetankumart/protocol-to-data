@@ -16,7 +16,7 @@ from typing import Callable, Optional
 from pydantic import ValidationError
 
 from .ingest import load_protocol_text
-from .llm import MODEL_REASON, complete_json, parse_model
+from .llm import MODEL_REASON, complete_json
 from .schemas import DomainPlan, ProtocolDesign
 
 _PROMPT_PATH = Path(__file__).resolve().parents[2] / "prompts" / "extract_design.md"
@@ -46,17 +46,13 @@ def extract_design_from_text(text: str, *, model: str = MODEL_REASON,
 
 def design_from_prompt(prompt: str, *, model: str = MODEL_REASON,
                        narrate: Optional[Narrator] = None) -> ProtocolDesign:
-    """Get a validated ProtocolDesign from a prompt: structured output, else JSON + repair.
+    """Get a validated ProtocolDesign from a prompt via JSON mode + one-shot repair.
 
-    Shared by extraction and by the loop's repair step so both get the same robustness.
-    Does not normalize — callers apply `normalize_design` when they want the DM guarantee.
+    Shared by extraction and the loop's repair step. (Structured outputs reject
+    ProtocolDesign with "Schema is too complex" — it's a 5-model nested schema — so we
+    use JSON mode directly and repair once if the first result is schema-invalid.)
     """
-    say = narrate or _noop
-    try:
-        return parse_model(prompt, ProtocolDesign, model=model, max_tokens=8000)
-    except Exception as e:  # noqa: BLE001 — structured path failed; fall back rather than crash
-        say(f"    → structured output unavailable ({type(e).__name__}); using JSON fallback")
-        return _extract_via_json(prompt, model=model, say=say)
+    return _extract_via_json(prompt, model=model, say=narrate or _noop)
 
 
 def _build_prompt(text: str) -> str:

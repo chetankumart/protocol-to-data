@@ -205,7 +205,8 @@ def _gen_ae(design: ProtocolDesign, subs: list[dict], rng: random.Random) -> pd.
 def _gen_ex(design: ProtocolDesign, subs: list[dict], rng: random.Random) -> pd.DataFrame:
     rows = []
     for s in subs:
-        dose = 0.0 if s["IS_PLACEBO"] else rng.choice([10, 20, 40])
+        # Fixed-dose study: one consistent active dose (placeholder — design carries no dose).
+        dose = 0.0 if s["IS_PLACEBO"] else 40.0
         rows.append({
             "STUDYID": design.study_id,
             "USUBJID": s["USUBJID"],

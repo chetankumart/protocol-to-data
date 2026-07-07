@@ -128,7 +128,13 @@ def detect_anomalies(design: ProtocolDesign, data_dir: str | Path, *,
     samples = []
     for p in sorted(data_dir.glob("*.csv")):
         df = pd.read_csv(p)
-        samples.append(f"### {p.stem.upper()}\n{df.head(sample_rows).to_csv(index=False)}")
+        # Sample head AND tail: injected defects (orphans, dups, added rows) land at the end,
+        # so a head-only sample would hide them from the detector.
+        if len(df) <= 2 * sample_rows:
+            sample = df
+        else:
+            sample = pd.concat([df.head(sample_rows), df.tail(sample_rows)])
+        samples.append(f"### {p.stem.upper()} ({len(df)} rows)\n{sample.to_csv(index=False)}")
     template = _PROMPT_PATH.read_text(encoding="utf-8")
     prompt = (template
               .replace("{{DESIGN_JSON}}", design.model_dump_json(indent=2))
