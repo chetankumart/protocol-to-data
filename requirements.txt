@@ -1,0 +1,6 @@
+anthropic>=0.40.0
+pydantic>=2.6
+pandas>=2.0
+pdfplumber>=0.11
+beautifulsoup4>=4.12
+pytest>=8.0

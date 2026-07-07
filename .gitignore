@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+venv/
+.venv/
+env/
+
+# Env / secrets
+.env
+*.key
+
+# Generated data (keep dirs via .gitkeep, ignore contents)
+data/output/*
+!data/output/.gitkeep
+data/protocols/*
+!data/protocols/.gitkeep
+design.json
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,31 @@
+[project]
+name = "protocol-to-data"
+version = "0.1.0"
+description = "Protocol → analyzable synthetic clinical dataset, one agentic loop driven by Claude."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Chetan Tamballa" }]
+dependencies = [
+    "anthropic>=0.40.0",
+    "pydantic>=2.6",
+    "pandas>=2.0",
+    "pdfplumber>=0.11",
+    "beautifulsoup4>=4.12",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.5"]
+
+[project.scripts]
+ptd = "cli:main"
+
+[tool.setuptools]
+py-modules = ["cli"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
