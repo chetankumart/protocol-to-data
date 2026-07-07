@@ -20,6 +20,10 @@ from .schemas import ProtocolDesign
 
 ENROLLMENT_START = date(2026, 1, 15)
 
+# SDTM domains the builtin backend can emit. A planned domain outside this set can't be
+# generated standalone — the loop's repair step remaps or drops it (see validate coverage check).
+BUILTIN_DOMAINS = {"DM", "VS", "LB", "QS", "AE", "EX"}
+
 
 def _ordered_visits(design: ProtocolDesign) -> list:
     """Visits in chronological order (by day). Falls back to a single day-1 visit."""

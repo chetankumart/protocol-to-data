@@ -38,18 +38,25 @@ def extract_design(protocol_path: str | Path, *, model: str = MODEL_REASON,
 def extract_design_from_text(text: str, *, model: str = MODEL_REASON,
                              narrate: Optional[Narrator] = None) -> ProtocolDesign:
     say = narrate or _noop
-    prompt = _build_prompt(text)
-
-    try:
-        design = parse_model(prompt, ProtocolDesign, model=model, max_tokens=8000)
-    except Exception as e:  # noqa: BLE001 — structured path failed; fall back rather than crash
-        say(f"    → structured extraction unavailable ({type(e).__name__}); using JSON fallback")
-        design = _extract_via_json(prompt, model=model, say=say)
-
-    design = _normalize(design)
+    design = normalize_design(design_from_prompt(_build_prompt(text), model=model, narrate=narrate))
     if design.assumptions:
         say(f"    → {len(design.assumptions)} assumption(s) noted (e.g. {design.assumptions[0]})")
     return design
+
+
+def design_from_prompt(prompt: str, *, model: str = MODEL_REASON,
+                       narrate: Optional[Narrator] = None) -> ProtocolDesign:
+    """Get a validated ProtocolDesign from a prompt: structured output, else JSON + repair.
+
+    Shared by extraction and by the loop's repair step so both get the same robustness.
+    Does not normalize — callers apply `normalize_design` when they want the DM guarantee.
+    """
+    say = narrate or _noop
+    try:
+        return parse_model(prompt, ProtocolDesign, model=model, max_tokens=8000)
+    except Exception as e:  # noqa: BLE001 — structured path failed; fall back rather than crash
+        say(f"    → structured output unavailable ({type(e).__name__}); using JSON fallback")
+        return _extract_via_json(prompt, model=model, say=say)
 
 
 def _build_prompt(text: str) -> str:
@@ -72,7 +79,7 @@ def _extract_via_json(prompt: str, *, model: str, say: Narrator) -> ProtocolDesi
         return ProtocolDesign.model_validate(raw)  # let a second failure surface
 
 
-def _normalize(design: ProtocolDesign) -> ProtocolDesign:
+def normalize_design(design: ProtocolDesign) -> ProtocolDesign:
     """Enforce invariants the generator relies on: DM present, no duplicate domains."""
     seen: set[str] = set()
     deduped: list[DomainPlan] = []

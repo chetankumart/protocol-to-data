@@ -12,10 +12,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
 
-from .extract import extract_design
-from .generate import generate_dataset
+from .extract import design_from_prompt, extract_design, normalize_design
+from .generate import BUILTIN_DOMAINS, generate_dataset
 from .ingest import sha256_of
-from .llm import MODEL_REASON, complete_json
+from .llm import MODEL_REASON
 from .schemas import ProtocolDesign, RunManifest, ValidationReport
 from .validate import validate_dataset
 
@@ -90,10 +90,12 @@ def run_loop(protocol_path: str | Path, *, subjects: int, seed: int,
 
 def _repair_design(design: ProtocolDesign, report: ValidationReport, *,
                    model: str, say: Narrator) -> ProtocolDesign:
-    """Ask Claude to adjust the design given validation failures.
+    """Ask Claude to adjust the design given validation failures, then regenerate.
 
-    Note: the builtin generator maintains invariants (e.g. AE onset ≥ RFSTDTC), so real
-    repairs will bite once generation grows richer (Day 3–4). The wiring lives here now.
+    The most common real failure is a planned domain the builtin generator can't emit
+    (e.g. EG/CM/MH extracted faithfully from a protocol). Claude remaps or drops it and
+    records the change in `assumptions`. Uses structured output, so the repair is
+    schema-valid; on any failure we keep the prior design rather than fake success.
     """
     prompt = f"""You are repairing a clinical trial synthetic-data design that failed validation.
 
@@ -103,14 +105,15 @@ Current design (JSON):
 Validation failures:
 {json.dumps([f.model_dump() for f in report.findings], indent=2)}
 
-Adjust the design to eliminate these failures (e.g. tighten visit windows, fix population
-sex for sex-specific forms, correct domain plans). Return the FULL corrected ProtocolDesign
-as JSON only — same schema, no prose."""
-    raw = complete_json(prompt, model=model, max_tokens=6000)
+The synthetic-data generator can only produce these SDTM domains: {sorted(BUILTIN_DOMAINS)}.
+For any planned domain it cannot produce, either remap the relevant endpoints to a supported
+domain or remove that domain — and note the change in `assumptions`. Also correct any
+population (e.g. sex for sex-specific forms) or schema issues the failures indicate.
+Return the FULL corrected ProtocolDesign."""
     try:
-        repaired = ProtocolDesign.model_validate(raw)
+        repaired = normalize_design(design_from_prompt(prompt, model=model, narrate=say))
         say("    → design adjusted")
         return repaired
-    except Exception as e:  # noqa: BLE001
-        say(f"    → repair parse failed ({e}); keeping prior design")
+    except Exception as e:  # noqa: BLE001 — repair failed; surface the report, don't fake success
+        say(f"    → repair failed ({e}); keeping prior design")
         return design

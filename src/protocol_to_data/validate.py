@@ -51,6 +51,12 @@ def validate_dataset(design: ProtocolDesign, data_dir: str | Path) -> Validation
             findings.append(ValidationFinding(check="schema", domain=name.upper(),
                                               message=f"missing columns: {sorted(missing)}"))
 
+    # coverage: every planned domain (except DM, handled below) must have produced a file
+    produced = {name.upper() for name in frames}
+    for dom in sorted(set(design.domain_names()) - produced - {"DM"}):
+        findings.append(ValidationFinding(check="coverage", domain=dom,
+                                          message=f"planned domain {dom} has no generated data"))
+
     dm = frames.get("dm")
     if dm is None or dm.empty:
         findings.append(ValidationFinding(check="non-empty", domain="DM",

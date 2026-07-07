@@ -28,9 +28,13 @@ Time-boxed so a demo exists by Day 5, then polish. Each day ends with something 
 - [x] Offline tests for LB/QS, trajectory, determinism, date anchoring
 
 ## Day 4 (Thu Jul 10) — Validation + self-repair
-- [ ] Implement `validate.py` checks (see SPEC)
-- [ ] Wire repair edge in `loop.py`: failures → Claude adjusts design/params → regenerate
-- [ ] Demonstrate a real repair (e.g. pre-dose AE auto-fixed)
+- [x] `validate.py` checks: schema, non-empty, referential, dates (pre-dose AE), ranges
+      (vitals + labs), sex-consistency, **planned-domain coverage** (new)
+- [x] Repair edge in `loop.py`: validation failure → Claude adjusts the design (structured
+      output, shared `design_from_prompt`) → regenerate; bounded by `--max-repairs`
+- [x] Demonstrated real repair: extraction plans a domain the builtin can't emit (e.g. EG),
+      coverage check flags it, repair drops/remaps it, second pass PASSes — narrated end-to-end
+- [x] Offline tests: converging repair, bounded no-fake-success, manifest persistence
 
 ## Day 5 (Fri Jul 11) — Anomaly loop + FREEZE demo path
 - [ ] Implement `anomalies.py` inject + Claude detect/explain
