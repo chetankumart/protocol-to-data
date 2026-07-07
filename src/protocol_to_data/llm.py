@@ -8,11 +8,15 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any
+from typing import Any, TypeVar
+
+from pydantic import BaseModel
 
 # Model tiers — see docs/SPEC.md "Model usage guidance"
 MODEL_REASON = "claude-opus-4-8"            # extraction, repair
 MODEL_CHEAP = "claude-haiku-4-5-20251001"   # cheap structural steps
+
+T = TypeVar("T", bound=BaseModel)
 
 
 def _client():
@@ -36,6 +40,27 @@ def complete(prompt: str, *, model: str = MODEL_REASON, max_tokens: int = 4096,
         kwargs["system"] = system
     resp = client.messages.create(**kwargs)
     return "".join(block.text for block in resp.content if getattr(block, "type", None) == "text")
+
+
+def parse_model(prompt: str, schema: type[T], *, model: str = MODEL_REASON,
+                max_tokens: int = 8000, system: str | None = None,
+                thinking: bool = True) -> T:
+    """Return a schema-valid pydantic instance using structured outputs.
+
+    Uses `messages.parse`, which constrains the response to `schema` server-side and
+    validates it — so the result is guaranteed to satisfy the model, not just be JSON.
+    Extraction is reasoning-heavy, so adaptive thinking is on by default.
+    """
+    client = _client()
+    kwargs: dict[str, Any] = dict(model=model, max_tokens=max_tokens,
+                                  output_format=schema,
+                                  messages=[{"role": "user", "content": prompt}])
+    if system:
+        kwargs["system"] = system
+    if thinking:
+        kwargs["thinking"] = {"type": "adaptive"}
+    resp = client.messages.parse(**kwargs)
+    return resp.parsed_output
 
 
 def complete_json(prompt: str, *, model: str = MODEL_REASON, max_tokens: int = 4096) -> dict:

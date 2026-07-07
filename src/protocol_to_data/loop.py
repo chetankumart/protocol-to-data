@@ -45,7 +45,7 @@ def run_loop(protocol_path: str | Path, *, subjects: int, seed: int,
     proto_sha = sha256_of(protocol_path)
 
     say("🧩  Extracting design (Claude) ...")
-    design = extract_design(protocol_path, model=model)
+    design = extract_design(protocol_path, model=model, narrate=say)
     if subjects:
         design.population.n_subjects = subjects
     say(f"    → {design.study_id}: {len(design.arms)} arms, {len(design.visits)} visits, "
