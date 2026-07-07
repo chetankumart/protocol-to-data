@@ -37,9 +37,15 @@ Time-boxed so a demo exists by Day 5, then polish. Each day ends with something 
 - [x] Offline tests: converging repair, bounded no-fake-success, manifest persistence
 
 ## Day 5 (Fri Jul 11) — Anomaly loop + FREEZE demo path
-- [ ] Implement `anomalies.py` inject + Claude detect/explain
-- [ ] `ptd run ... --anomalies 5` works end-to-end
-- [ ] 🔒 Freeze a known-good demo command + seed; stop adding features to the demo path
+- [x] `anomalies.py` inject (5 detectable defects: temporal/physiologic/referential/
+      uniqueness/logical) + Claude detect (structured output) + `score_detections`
+- [x] Fixed weak injectors: LB-aware orphan; PREGNANCY-on-male as a real logical anomaly
+- [x] CLI prints the "N/N caught" scorecard + missed list
+- [x] `ptd run ... --anomalies 5` wired end-to-end (offline: inject + score verified;
+      detection needs the key)
+- [x] 🔒 Frozen demo path: `ptd run examples/sample_protocol.md --subjects 40 --seed 42
+      --anomalies 5`; ECG line added so the repair beat fires; DEMO_SCRIPT aligned to reality
+- [x] Offline tests for injection determinism/targeting + scoring
 
 ## Day 6 (Sat Jul 12) — Demo video + write-up
 - [ ] Record 2–3 min narrated demo (see `DEMO_SCRIPT.md`)

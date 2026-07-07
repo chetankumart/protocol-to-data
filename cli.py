@@ -97,7 +97,7 @@ def cmd_anomalies(a: argparse.Namespace) -> int:
 
 
 def _run_anomalies(design, data_dir, *, count: int, seed: int) -> None:
-    from protocol_to_data.anomalies import detect_anomalies, inject_anomalies
+    from protocol_to_data.anomalies import detect_anomalies, inject_anomalies, score_detections
 
     print(f"\n🕵️  Injecting {count} anomalies (seed {seed}) ...")
     truth = inject_anomalies(data_dir, count=count, seed=seed)
@@ -106,9 +106,13 @@ def _run_anomalies(design, data_dir, *, count: int, seed: int) -> None:
 
     print("🔎  Claude detecting ...")
     findings = detect_anomalies(design, data_dir)
-    print(f"    Claude found {len(findings)} anomalies:")
     for f in findings:
         print(f"    • [{f.anomaly_type}] {f.domain}: {f.description}")
+
+    score = score_detections(truth, findings)
+    print(f"\n🎯  Claude caught {score['caught']}/{score['total']} injected anomalies")
+    for t in score["missed"]:
+        print(f"    • MISSED {t['type']} in {t['domain']} ({t.get('usubjid')})")
 
 
 def build_parser() -> argparse.ArgumentParser:

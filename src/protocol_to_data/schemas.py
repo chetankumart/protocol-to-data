@@ -96,6 +96,12 @@ class AnomalyFinding(BaseModel):
     severity: Literal["high", "medium", "low"] = "high"
 
 
+class AnomalyReport(BaseModel):
+    """Structured-output target for the detection agent."""
+    findings: list[AnomalyFinding] = Field(default_factory=list)
+    summary: str = ""
+
+
 class RunManifest(BaseModel):
     study_id: str
     protocol_path: str

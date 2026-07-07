@@ -53,5 +53,6 @@ real studies enroll hundreds).
 - **Vital signs (VS):** blood pressure, pulse at every visit.
 - **Laboratory (LB):** NT-proBNP, chemistry, hematology at screening, Week 12, Week 24.
 - **Patient-reported outcomes (QS):** KCCQ-12 and NYHA class at baseline, Week 12, Week 24.
+- **12-lead ECG (SDTM domain EG):** QTcF interval at screening, Week 12, Week 24.
 - **Exposure (EX):** study drug dosing recorded from Day 1.
 - **Adverse events (AE):** collected continuously from first dose onward.
