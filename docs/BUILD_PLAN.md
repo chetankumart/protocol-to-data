@@ -18,9 +18,14 @@ Time-boxed so a demo exists by Day 5, then polish. Each day ends with something 
 - [ ] `ptd extract` produces a correct design — **needs the key**
 
 ## Day 3 (Wed Jul 9) — Real generation (builtin backend)
-- [ ] Implement `generate.py` builtin: DM → VS → AE → LB → QS → EX
-- [ ] Deterministic with `--seed`; dates anchored to visit schedule + RFSTDTC
-- [ ] `ptd generate design.json` produces CSVs
+- [x] `generate.py` builtin: DM → VS → LB → QS → AE → EX (all six domains)
+- [x] Deterministic with `--seed`; dates anchored to visit schedule + RFSTDTC
+      (screening now lands before first dose)
+- [x] Light HFrEF trajectories: NT-proBNP falls / KCCQ rises / NYHA downgrades,
+      stronger on active drug than placebo — visible treatment effect in the demo
+- [x] Validation extended: LB/QS schema checks + lab physiologic-range check
+- [x] `ptd generate design.json` produces CSVs (verified end-to-end, no key)
+- [x] Offline tests for LB/QS, trajectory, determinism, date anchoring
 
 ## Day 4 (Thu Jul 10) — Validation + self-repair
 - [ ] Implement `validate.py` checks (see SPEC)

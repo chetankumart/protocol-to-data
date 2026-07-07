@@ -14,11 +14,23 @@ from .schemas import ProtocolDesign, ValidationFinding, ValidationReport
 REQUIRED_COLUMNS = {
     "dm": {"STUDYID", "USUBJID", "ARM", "AGE", "SEX", "RFSTDTC"},
     "vs": {"USUBJID", "VSTESTCD", "VSORRES", "VSDTC"},
+    "lb": {"USUBJID", "LBTESTCD", "LBORRES", "LBDTC"},
+    "qs": {"USUBJID", "QSTESTCD", "QSORRES", "QSDTC"},
     "ae": {"USUBJID", "AETERM", "AESTDTC"},
     "ex": {"USUBJID", "EXTRT", "EXSTDTC"},
 }
 
 VITAL_BOUNDS = {"SYSBP": (60, 260), "DIABP": (30, 160), "PULSE": (30, 200)}
+LAB_BOUNDS = {"NTPROBNP": (0, 35000), "CREAT": (0.2, 4.0), "HGB": (5, 22), "K": (2.0, 7.5)}
+
+
+def _count_out_of_range(df: pd.DataFrame, testcd_col: str, orres_col: str,
+                        bounds: dict[str, tuple[float, float]]) -> int:
+    oob = 0
+    for tc, (lo, hi) in bounds.items():
+        sub = pd.to_numeric(df.loc[df[testcd_col] == tc, orres_col], errors="coerce")
+        oob += int(((sub < lo) | (sub > hi)).sum())
+    return oob
 
 
 def validate_dataset(design: ProtocolDesign, data_dir: str | Path) -> ValidationReport:
@@ -69,16 +81,20 @@ def validate_dataset(design: ProtocolDesign, data_dir: str | Path) -> Validation
                                               message=f"{predose} pre-dose adverse events (AESTDTC < RFSTDTC)",
                                               count=predose))
 
-    # physiologic ranges
+    # physiologic ranges — vitals and labs
     vs = frames.get("vs")
     if vs is not None and not vs.empty and {"VSTESTCD", "VSORRES"}.issubset(vs.columns):
-        oob = 0
-        for tc, (lo, hi) in VITAL_BOUNDS.items():
-            sub = pd.to_numeric(vs.loc[vs["VSTESTCD"] == tc, "VSORRES"], errors="coerce")
-            oob += int(((sub < lo) | (sub > hi)).sum())
+        oob = _count_out_of_range(vs, "VSTESTCD", "VSORRES", VITAL_BOUNDS)
         if oob:
             findings.append(ValidationFinding(check="ranges", domain="VS",
                                               message=f"{oob} out-of-range vital signs", count=oob))
+
+    lb = frames.get("lb")
+    if lb is not None and not lb.empty and {"LBTESTCD", "LBORRES"}.issubset(lb.columns):
+        oob = _count_out_of_range(lb, "LBTESTCD", "LBORRES", LAB_BOUNDS)
+        if oob:
+            findings.append(ValidationFinding(check="ranges", domain="LB",
+                                              message=f"{oob} out-of-range lab results", count=oob))
 
     # sex consistency (pregnancy-style female-only forms)
     for name, df in frames.items():
