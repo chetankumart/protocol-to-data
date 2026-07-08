@@ -49,7 +49,10 @@ Time-boxed so a demo exists by Day 5, then polish. Each day ends with something 
 
 ## Day 6 (Sat Jul 12) — Demo video + write-up
 - [ ] Record 2–3 min narrated demo (see `DEMO_SCRIPT.md`)
-- [ ] Write submission description (emphasize what was built this week)
+- [x] Write submission description (`docs/SUBMISSION.md`) — emphasizes what was built this
+      week; backed by two live runs (HFrEF sample + real 179-page Amgen oncology PDF)
+- [x] Live-verified PDF ingest on a real 179-page protocol (AMG 510 / CodeBreak 200):
+      extract 14 domains → repair drops 8 unproducible oncology domains → PASS → 5/5 anomalies
 - [ ] Clean README, add screenshots/gif of the narrated loop
 
 ## Day 7 (Sun Jul 13) — Buffer + submit
