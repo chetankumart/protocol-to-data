@@ -15,11 +15,13 @@ from typing import Callable, Optional
 
 from pydantic import ValidationError
 
-from .ingest import load_protocol_text
+from .ingest import load_protocol_text, sha256_of
 from .llm import MODEL_REASON, complete_json
 from .schemas import DomainPlan, ProtocolDesign
 
-_PROMPT_PATH = Path(__file__).resolve().parents[2] / "prompts" / "extract_design.md"
+_ROOT = Path(__file__).resolve().parents[2]
+_PROMPT_PATH = _ROOT / "prompts" / "extract_design.md"
+_CACHE_DIR = _ROOT / ".cache"          # semantic (content-addressed) extraction cache
 _MAX_CHARS = 120_000  # keep within context
 
 Narrator = Callable[[str], None]
@@ -30,9 +32,50 @@ def _noop(_: str) -> None:
 
 
 def extract_design(protocol_path: str | Path, *, model: str = MODEL_REASON,
-                   narrate: Optional[Narrator] = None) -> ProtocolDesign:
-    """Read a protocol file and return a validated ProtocolDesign."""
-    return extract_design_from_text(load_protocol_text(protocol_path), model=model, narrate=narrate)
+                   narrate: Optional[Narrator] = None, use_cache: bool = True) -> ProtocolDesign:
+    """Read a protocol file and return a validated ProtocolDesign.
+
+    Semantic cache: the design is keyed by the SHA-256 of the document bytes. If a cached
+    `{hash}_extracted_design.json` exists, it's loaded and the Claude extraction call is
+    skipped entirely — identical documents never pay for extraction twice. Pass
+    `use_cache=False` to force a fresh extraction.
+    """
+    say = narrate or _noop
+    if use_cache:
+        cached = _load_cached_design(protocol_path, say)
+        if cached is not None:
+            return cached
+    design = extract_design_from_text(load_protocol_text(protocol_path), model=model, narrate=narrate)
+    if use_cache:
+        _save_cached_design(protocol_path, design, say)
+    return design
+
+
+def _cache_file(protocol_path: str | Path) -> Path:
+    return _CACHE_DIR / f"{sha256_of(protocol_path)}_extracted_design.json"
+
+
+def _load_cached_design(protocol_path: str | Path, say: Narrator) -> Optional[ProtocolDesign]:
+    """Return the cached design for this document, or None on miss / corrupt cache."""
+    fp = _cache_file(protocol_path)
+    if not fp.exists():
+        return None
+    try:
+        design = ProtocolDesign.model_validate_json(fp.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001 — a corrupt/stale cache entry is just a miss
+        return None
+    say(f"    → cache hit — loaded design, skipped Claude extraction ({fp.name[:19]}…)")
+    return design
+
+
+def _save_cached_design(protocol_path: str | Path, design: ProtocolDesign, say: Narrator) -> None:
+    """Persist the extracted design; caching is best-effort and never fails the run."""
+    try:
+        _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        _cache_file(protocol_path).write_text(design.model_dump_json(indent=2), encoding="utf-8")
+        say("    → cached extracted design for future runs")
+    except OSError:
+        pass
 
 
 def extract_design_from_text(text: str, *, model: str = MODEL_REASON,

@@ -55,7 +55,7 @@ def cmd_run(a: argparse.Namespace) -> int:
 def cmd_extract(a: argparse.Namespace) -> int:
     from protocol_to_data.extract import extract_design
 
-    design = extract_design(a.protocol)
+    design = extract_design(a.protocol, narrate=print)
     out = a.output or "design.json"
     Path(out).write_text(design.model_dump_json(indent=2))
     print(f"🧩  Design → {out}  ({design.study_id}: {len(design.domains)} domains)")

@@ -12,6 +12,9 @@ env/
 .env
 *.key
 
+# Semantic extraction cache (content-addressed by document hash)
+.cache/
+
 # Generated data (keep dirs via .gitkeep, ignore contents)
 data/output/*
 !data/output/.gitkeep
