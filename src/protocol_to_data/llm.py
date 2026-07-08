@@ -18,6 +18,43 @@ MODEL_CHEAP = "claude-haiku-4-5-20251001"   # cheap structural steps
 
 T = TypeVar("T", bound=BaseModel)
 
+# --- Usage observability (cost awareness) ---------------------------------------------
+# USD per 1M tokens (input, output). Defaults to the reasoning model's rate for unknowns.
+PRICING = {
+    "claude-opus-4-8": (5.00, 25.00),
+    "claude-haiku-4-5-20251001": (1.00, 5.00),
+    "claude-haiku-4-5": (1.00, 5.00),
+}
+_usage: dict[str, list[int]] = {}  # model -> [input_tokens, output_tokens], accumulated per run
+
+
+def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
+    """Estimated USD cost for a call, from the model's per-1M-token pricing."""
+    rate_in, rate_out = PRICING.get(model, PRICING[MODEL_REASON])
+    return input_tokens / 1e6 * rate_in + output_tokens / 1e6 * rate_out
+
+
+def reset_usage() -> None:
+    """Clear the token tally — call at the start of a run."""
+    _usage.clear()
+
+
+def _record_usage(model: str, usage) -> None:
+    """Accumulate input/output tokens from an API response's `usage` metadata."""
+    if usage is None:
+        return
+    entry = _usage.setdefault(model, [0, 0])
+    entry[0] += getattr(usage, "input_tokens", 0) or 0
+    entry[1] += getattr(usage, "output_tokens", 0) or 0
+
+
+def usage_summary() -> dict:
+    """Cumulative tokens + estimated cost since the last reset (summed across models)."""
+    total_in = sum(v[0] for v in _usage.values())
+    total_out = sum(v[1] for v in _usage.values())
+    cost = sum(estimate_cost(m, i, o) for m, (i, o) in _usage.items())
+    return {"input_tokens": total_in, "output_tokens": total_out, "cost": cost}
+
 
 def _client():
     try:
@@ -39,6 +76,7 @@ def complete(prompt: str, *, model: str = MODEL_REASON, max_tokens: int = 4096,
     if system:
         kwargs["system"] = system
     resp = client.messages.create(**kwargs)
+    _record_usage(model, getattr(resp, "usage", None))
     return "".join(block.text for block in resp.content if getattr(block, "type", None) == "text")
 
 
@@ -60,6 +98,7 @@ def parse_model(prompt: str, schema: type[T], *, model: str = MODEL_REASON,
     if thinking:
         kwargs["thinking"] = {"type": "adaptive"}
     resp = client.messages.parse(**kwargs)
+    _record_usage(model, getattr(resp, "usage", None))
     return resp.parsed_output
 
 

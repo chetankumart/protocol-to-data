@@ -26,6 +26,7 @@ from protocol_to_data.anomalies import (  # noqa: E402
 )
 from protocol_to_data import rbac  # noqa: E402  — RBAC stubs (not enforced; see rbac.py)
 from protocol_to_data.history import list_runs, load_run, run_label, save_run  # noqa: E402
+from protocol_to_data.llm import reset_usage, usage_summary  # noqa: E402  — cost tracking
 from protocol_to_data.loop import run_loop  # noqa: E402
 
 cli._load_dotenv()
@@ -65,6 +66,7 @@ def execute(protocol_path: str, subjects: int, seed: int, anomalies: int):
 
     def worker() -> None:
         try:
+            reset_usage()  # start this run's token/cost tally from zero
             res = run_loop(protocol_path, subjects=int(subjects), seed=int(seed),
                            out_root=str(_ROOT / "data" / "output"), narrate=narrate)
             holder["result"] = res
@@ -78,6 +80,7 @@ def execute(protocol_path: str, subjects: int, seed: int, anomalies: int):
                 for f in findings:
                     narrate(f"    • [{f.anomaly_type}] {f.domain}: {f.description}")
                 holder["score"] = score_detections(truth, findings)
+            holder["usage"] = usage_summary()  # tokens + $ across extraction/repair/detection
             # snapshot the completed run into runs/<timestamp>/ for the history dropdown
             try:
                 score = holder.get("score")
@@ -108,10 +111,22 @@ def execute(protocol_path: str, subjects: int, seed: int, anomalies: int):
     yield "\n".join(lines), True, _final_payload(holder)
 
 
+def _fmt_tokens(n: int) -> str:
+    return f"{n / 1000:.0f}k" if n >= 1000 else str(int(n))
+
+
+def _usage_badge(usage: dict | None) -> str:
+    if not usage:
+        return "🪙 Run Cost: —"
+    return (f"🪙 **Run Cost: ${usage['cost']:.2f}** · "
+            f"{_fmt_tokens(usage['input_tokens'])} in / {_fmt_tokens(usage['output_tokens'])} out")
+
+
 def _final_payload(holder: dict) -> dict:
     res = holder.get("result")
     if res is None:
-        return {"design_json": "{}", "domains": [], "output_dir": "", "scorecard": ""}
+        return {"design_json": "{}", "domains": [], "output_dir": "", "scorecard": "",
+                "usage_badge": _usage_badge(holder.get("usage"))}
     out_dir = Path(res.output_dir)
     domains = sorted(p.stem.upper() for p in out_dir.glob("*.csv"))
     return {
@@ -119,6 +134,7 @@ def _final_payload(holder: dict) -> dict:
         "domains": domains,
         "output_dir": str(out_dir),
         "scorecard": scorecard_markdown(holder.get("score")),
+        "usage_badge": _usage_badge(holder.get("usage")),
     }
 
 
@@ -161,8 +177,9 @@ def build_ui():
                 history_dd = gr.Dropdown(label="📁 Load a previous run", choices=_run_choices(),
                                          value=None, interactive=True)
             with gr.Column(scale=2):
-                narration = gr.Textbox(label="Live agent narration", lines=18,
-                                       max_lines=18, interactive=False, autoscroll=True)
+                narration = gr.Textbox(label="Live agent narration", lines=17,
+                                       max_lines=17, interactive=False, autoscroll=True)
+                usage_badge = gr.Markdown("🪙 Run Cost: —")  # cumulative tokens + $ for this run
 
         with gr.Accordion("🧩 Extracted ProtocolDesign", open=False):
             design_code = gr.Code(language="json", label="design (post-repair)")
@@ -189,6 +206,7 @@ def build_ui():
                         scorecard: extras["scorecard"],
                         data_df: _load_domain_csv(extras["output_dir"], domains[0] if domains else ""),
                         history_dd: gr.update(choices=_run_choices()),  # surface the just-saved run
+                        usage_badge: extras["usage_badge"],
                     }
 
         def on_load_run(run_dir):
@@ -207,7 +225,8 @@ def build_ui():
             }
 
         run_btn.click(on_run, [file_in, use_sample, subjects, seed, anomalies, export_format],
-                      [narration, design_code, domain_dd, out_dir_state, scorecard, data_df, history_dd])
+                      [narration, design_code, domain_dd, out_dir_state, scorecard, data_df,
+                       history_dd, usage_badge])
         history_dd.change(on_load_run, [history_dd],
                           [narration, design_code, domain_dd, out_dir_state, scorecard, data_df])
         domain_dd.change(_load_domain_csv, [out_dir_state, domain_dd], data_df)

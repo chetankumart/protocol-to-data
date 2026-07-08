@@ -40,8 +40,10 @@ from protocol_to_data.schemas import ProtocolDesign  # noqa: E402
 
 
 def cmd_run(a: argparse.Namespace) -> int:
+    from protocol_to_data.llm import reset_usage, usage_summary
     from protocol_to_data.loop import run_loop
 
+    reset_usage()  # start this run's token/cost tally
     result = run_loop(a.protocol, subjects=a.subjects, seed=a.seed,
                       out_root=a.out_root, backend=a.backend, max_repairs=a.max_repairs,
                       use_cache=not a.no_cache)
@@ -51,6 +53,8 @@ def cmd_run(a: argparse.Namespace) -> int:
     score = _run_anomalies(result.design, result.output_dir, count=a.anomalies,
                            seed=a.seed) if a.anomalies else None
     _archive_run(result, a, score)
+    u = usage_summary()
+    print(f"🪙  Run cost: ${u['cost']:.2f} · {u['input_tokens']:,} in / {u['output_tokens']:,} out")
     return 0 if result.report.passed else 1
 
 

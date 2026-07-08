@@ -56,6 +56,20 @@ def _clamp(x: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, x))
 
 
+def _visitnum(v, design: ProtocolDesign) -> float:
+    """Stable VISITNUM from the visit's position in the full chronological schedule.
+
+    Derived from the full ordered visit list (not per-domain iteration), so a given clinical
+    timepoint carries the *same* VISITNUM in every longitudinal domain — e.g. VISITNUM 2.0
+    means the same visit in VS, LB, QS, and RS.
+    """
+    name = getattr(v, "name", "VISIT")
+    for i, ov in enumerate(_ordered_visits(design)):
+        if getattr(ov, "name", "VISIT") == name:
+            return float(i + 1)
+    return 0.0
+
+
 def generate_dataset(design: ProtocolDesign, *, subjects: int, seed: int,
                      out_root: str | Path, backend: str = "builtin") -> Path:
     """Generate CSVs and return the synthetic_data directory."""
@@ -73,28 +87,52 @@ def _generate_builtin(design: ProtocolDesign, *, subjects: int, seed: int,
     out_dir = Path(out_root) / design.study_id / "synthetic_data"
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # DM is generated first — USUBJID is the primary key every other domain references.
     subs = _make_subjects(design, subjects, rng)
-    _gen_dm(design, subs).to_csv(out_dir / "dm.csv", index=False)
+    frames: dict[str, pd.DataFrame] = {"dm": _gen_dm(design, subs)}
 
     planned = set(design.domain_names())
     if "VS" in planned:
-        _gen_vs(design, subs, rng).to_csv(out_dir / "vs.csv", index=False)
+        frames["vs"] = _gen_vs(design, subs, rng)
     if "LB" in planned:
         lb = _gen_lb_oncology if profile == "oncology" else _gen_lb_cardiology
-        lb(design, subs, rng).to_csv(out_dir / "lb.csv", index=False)
+        frames["lb"] = lb(design, subs, rng)
     if "QS" in planned:
         qs = _gen_qs_oncology if profile == "oncology" else _gen_qs_cardiology
-        qs(design, subs, rng).to_csv(out_dir / "qs.csv", index=False)
+        frames["qs"] = qs(design, subs, rng)
     if "RS" in planned:
-        _gen_rs(design, subs, rng).to_csv(out_dir / "rs.csv", index=False)
+        frames["rs"] = _gen_rs(design, subs, rng)
     if "AE" in planned:
-        _gen_ae(design, subs, rng, profile).to_csv(out_dir / "ae.csv", index=False)
+        frames["ae"] = _gen_ae(design, subs, rng, profile)
     if "CM" in planned:
-        _gen_cm(design, subs, rng, profile).to_csv(out_dir / "cm.csv", index=False)
+        frames["cm"] = _gen_cm(design, subs, rng, profile)
     if "EX" in planned:
-        _gen_ex(design, subs, profile).to_csv(out_dir / "ex.csv", index=False)
+        frames["ex"] = _gen_ex(design, subs, profile)
 
+    _enforce_referential_integrity(frames)  # drop orphans + assert before writing
+
+    for name, df in frames.items():
+        df.to_csv(out_dir / f"{name}.csv", index=False)
     return out_dir
+
+
+def _enforce_referential_integrity(frames: dict[str, pd.DataFrame]) -> None:
+    """SDTM traceability guard: every child-domain USUBJID must exist in DM.
+
+    Auto-repairs by dropping orphan rows, then asserts zero orphans remain before the
+    datasets are written — so the output is always a valid relational set (no dangling FKs).
+    """
+    dm_ids = set(frames["dm"]["USUBJID"])
+    for name in list(frames):
+        if name == "dm":
+            continue
+        df = frames[name]
+        if df.empty or "USUBJID" not in df.columns:
+            continue
+        keep = df["USUBJID"].isin(dm_ids)
+        if not keep.all():
+            frames[name] = df[keep].reset_index(drop=True)  # drop orphan rows to repair
+        assert set(frames[name]["USUBJID"]) <= dm_ids, f"orphan USUBJID remains in {name}"
 
 
 def _make_subjects(design: ProtocolDesign, n: int, rng: random.Random) -> list[dict]:
@@ -140,7 +178,7 @@ def _gen_vs(design: ProtocolDesign, subs: list[dict], rng: random.Random) -> pd.
                     "STUDYID": design.study_id,
                     "USUBJID": s["USUBJID"],
                     "VSSEQ": seq[s["USUBJID"]],
-                    "VISIT": getattr(v, "name", "VISIT"),
+                    "VISIT": getattr(v, "name", "VISIT"), "VISITNUM": _visitnum(v, design),
                     "VSTESTCD": test,
                     "VSORRES": round(rng.gauss(mean, sd), 1),
                     "VSDTC": vdate.isoformat(),
@@ -172,6 +210,7 @@ def _gen_lb_cardiology(design: ProtocolDesign, subs: list[dict], rng: random.Ran
                 rows.append({
                     "STUDYID": design.study_id, "USUBJID": s["USUBJID"],
                     "LBSEQ": seq[s["USUBJID"]], "VISIT": getattr(v, "name", "VISIT"),
+                    "VISITNUM": _visitnum(v, design),
                     "LBTESTCD": test, "LBORRES": val, "LBORRESU": unit,
                     "LBDTC": vdate.isoformat(),
                 })
@@ -221,7 +260,7 @@ def _gen_lb_oncology(design: ProtocolDesign, subs: list[dict], rng: random.Rando
                 rows.append({
                     "STUDYID": design.study_id, "USUBJID": s["USUBJID"],
                     "LBSEQ": seq[s["USUBJID"]], "LBCAT": "CHEMISTRY/HEMATOLOGY",
-                    "VISIT": getattr(v, "name", "VISIT"),
+                    "VISIT": getattr(v, "name", "VISIT"), "VISITNUM": _visitnum(v, design),
                     "LBTESTCD": tc, "LBORRES": round(max(val, 0.0), dec), "LBORRESU": unit,
                     "LBDTC": vdate.isoformat(),
                 })
@@ -232,7 +271,7 @@ def _gen_lb_oncology(design: ProtocolDesign, subs: list[dict], rng: random.Rando
                 rows.append({
                     "STUDYID": design.study_id, "USUBJID": s["USUBJID"],
                     "LBSEQ": seq[s["USUBJID"]], "LBCAT": "PK",
-                    "VISIT": getattr(v, "name", "VISIT"),
+                    "VISIT": getattr(v, "name", "VISIT"), "VISITNUM": _visitnum(v, design),
                     "LBTESTCD": tc, "LBORRES": round(max(rng.gauss(mean, sd), 0.0), 0),
                     "LBORRESU": "ng/mL", "LBDTC": vdate.isoformat(),
                 })
@@ -259,6 +298,7 @@ def _gen_qs_cardiology(design: ProtocolDesign, subs: list[dict], rng: random.Ran
                 rows.append({
                     "STUDYID": design.study_id, "USUBJID": s["USUBJID"],
                     "QSSEQ": seq[s["USUBJID"]], "VISIT": getattr(v, "name", "VISIT"),
+                    "VISITNUM": _visitnum(v, design),
                     "QSTESTCD": test, "QSORRES": val, "QSDTC": vdate.isoformat(),
                 })
     return pd.DataFrame(rows)
@@ -288,6 +328,7 @@ def _gen_qs_oncology(design: ProtocolDesign, subs: list[dict], rng: random.Rando
                 rows.append({
                     "STUDYID": design.study_id, "USUBJID": s["USUBJID"],
                     "QSSEQ": seq[s["USUBJID"]], "VISIT": getattr(v, "name", "VISIT"),
+                    "VISITNUM": _visitnum(v, design),
                     "QSTESTCD": test, "QSORRES": val, "QSDTC": vdate.isoformat(),
                 })
     return pd.DataFrame(rows)
@@ -325,7 +366,7 @@ def _gen_rs(design: ProtocolDesign, subs: list[dict], rng: random.Random) -> pd.
             rows.append({
                 "STUDYID": design.study_id, "USUBJID": s["USUBJID"],
                 "RSSEQ": seq[s["USUBJID"]], "RSCAT": "RECIST 1.1",
-                "VISIT": getattr(v, "name", "VISIT"),
+                "VISIT": getattr(v, "name", "VISIT"), "VISITNUM": _visitnum(v, design),
                 "RSTESTCD": "OVRLRESP", "RSORRES": resp, "RSDTC": vdate.isoformat(),
             })
     return pd.DataFrame(rows)
