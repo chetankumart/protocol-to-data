@@ -115,6 +115,31 @@ agentic orchestration — extraction, repair, detection — is what's new.
 - 23 offline tests (no key needed) cover schemas, generation/trajectories, validation, the
   repair loop, and anomaly injection/scoring.
 
+## Enterprise readiness
+
+Beyond the core loop, the app carries the systems-thinking a real deployment needs — built
+lean, but showing the shape of production:
+
+- **Semantic caching (cost efficiency).** Extraction is content-addressed by the document's
+  SHA-256 (`.cache/{hash}_extracted_design.json`). An identical protocol never pays for
+  extraction twice — a cold 25 s / one-API-call run becomes a warm **0.4 s / $0** run.
+  `--no-cache` forces a fresh call for live demos.
+- **Durable run history (state management).** Every run snapshots into `runs/<timestamp>/`
+  (SDTM CSVs + design + scorecard + meta). The UI's **"Load a previous run"** dropdown
+  restores the whole dashboard from any saved state — no re-running required.
+- **RBAC-aware architecture.** `rbac.py` delineates a **Clinical Data Manager** (write:
+  run/generate/snapshot) from a **Statistician** (read-only: browse/restore), with the
+  authorization injection points wired into the data-access and UI layers. Stubbed for the
+  hackathon, not enforced — but the seams are where they belong.
+- **Dictionary-coded SDTM (clinical fidelity).** AE carries `AEDECOD` (MedDRA) beside the
+  verbatim `AETERM` ("bad headache" → "Headache"); the CM domain carries `CMDECOD`
+  (WHODrug, "lasix" → "Furosemide"). A lightweight coder stands in for what production would
+  route through an official MedDRA/WHODrug mapping service.
+- **EDC-target awareness.** The UI's **Target Export Format** selector offers SDTM
+  (implemented) plus CDASH ODM-XML targets for Medidata Rave and Veeva Vault EDC — which
+  surface a v2-roadmap notice and fall back to SDTM, showing awareness of the downstream EDC
+  ecosystem without over-building it.
+
 ## Honest limitations & what's next
 
 - The **builtin generator is therapeutic-area-aware** — a cardiology profile (NT-proBNP,
