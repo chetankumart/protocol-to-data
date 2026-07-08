@@ -17,7 +17,8 @@ REQUIRED_COLUMNS = {
     "lb": {"USUBJID", "LBTESTCD", "LBORRES", "LBDTC"},
     "qs": {"USUBJID", "QSTESTCD", "QSORRES", "QSDTC"},
     "rs": {"USUBJID", "RSTESTCD", "RSORRES", "RSDTC"},
-    "ae": {"USUBJID", "AETERM", "AESTDTC"},
+    "ae": {"USUBJID", "AETERM", "AEDECOD", "AESTDTC"},   # AEDECOD = MedDRA-coded term
+    "cm": {"USUBJID", "CMTRT", "CMDECOD", "CMSTDTC"},    # CMDECOD = WHODrug-coded name
     "ex": {"USUBJID", "EXTRT", "EXSTDTC"},
 }
 

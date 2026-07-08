@@ -14,6 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from . import rbac
 from .schemas import ProtocolDesign
 
 _RUNS_DIR = Path(__file__).resolve().parents[2] / "runs"
@@ -27,6 +28,7 @@ def save_run(design: ProtocolDesign, csv_dir: str | Path, *, subjects: int, seed
              scorecard_md: Optional[str] = None, caught: Optional[int] = None,
              total: Optional[int] = None) -> Path:
     """Copy a completed run's CSVs + design + scorecard into `runs/<timestamp>/`."""
+    rbac.require_write()  # RBAC injection point: snapshotting a run is a Clinical-Data-Manager op
     csv_dir = Path(csv_dir)
     ts = _timestamp()
     run_dir = _RUNS_DIR / ts
@@ -80,6 +82,7 @@ def run_label(meta: dict) -> str:
 
 def load_run(run_dir: str | Path) -> dict:
     """Restore a saved run: design JSON, produced domains, csv dir, and scorecard markdown."""
+    rbac.require_read()  # RBAC injection point: restoring a run is read-only (Statistician-safe)
     run_dir = Path(run_dir)
     design_fp = run_dir / "design.json"
     score_fp = run_dir / "scorecard.md"

@@ -24,12 +24,30 @@ import cli  # noqa: E402  — reuse its .env loader
 from protocol_to_data.anomalies import (  # noqa: E402
     detect_anomalies, inject_anomalies, score_detections, scorecard_markdown,
 )
+from protocol_to_data import rbac  # noqa: E402  — RBAC stubs (not enforced; see rbac.py)
 from protocol_to_data.history import list_runs, load_run, run_label, save_run  # noqa: E402
 from protocol_to_data.loop import run_loop  # noqa: E402
 
 cli._load_dotenv()
 
 SAMPLE = _ROOT / "examples" / "sample_protocol.md"
+
+# Target export formats. Only SDTM is implemented; the EDC ODM-XML targets are demo stubs
+# that surface a roadmap notice and fall back to SDTM (no XML generation is built).
+EXPORT_SDTM = "SDTM (CSV/Parquet) - Analytics Ready"
+EXPORT_FORMATS = [
+    EXPORT_SDTM,
+    "CDASH (ODM XML) - Medidata Rave",
+    "CDASH (ODM XML) - Veeva Vault EDC",
+]
+
+
+def _export_warning(fmt: str) -> str:
+    """Non-SDTM targets are not built — return the roadmap notice to prepend to the run."""
+    if fmt and fmt != EXPORT_SDTM:
+        return ("⚠️  EDC ODM-XML integration is slated for the v2 roadmap. "
+                "Proceeding with SDTM analytics export.\n\n")
+    return ""
 
 
 def execute(protocol_path: str, subjects: int, seed: int, anomalies: int):
@@ -137,6 +155,8 @@ def build_ui():
                 subjects = gr.Slider(4, 100, value=40, step=1, label="Subjects")
                 seed = gr.Number(value=42, precision=0, label="Seed (reproducible)")
                 anomalies = gr.Slider(0, 5, value=5, step=1, label="Anomalies to inject + detect")
+                export_format = gr.Dropdown(label="Target Export Format", choices=EXPORT_FORMATS,
+                                            value=EXPORT_SDTM, interactive=True)
                 run_btn = gr.Button("▶  Run the loop", variant="primary")
                 history_dd = gr.Dropdown(label="📁 Load a previous run", choices=_run_choices(),
                                          value=None, interactive=True)
@@ -152,15 +172,17 @@ def build_ui():
         with gr.Accordion("🎯 Anomaly scorecard", open=True):
             scorecard = gr.Markdown()
 
-        def on_run(file, use_samp, subj, sd, anom):
+        def on_run(file, use_samp, subj, sd, anom, export_fmt):
+            rbac.require_write()  # RBAC injection point: running/generating is a write op (CDM)
+            warning = _export_warning(export_fmt)  # EDC targets → roadmap notice, fall back to SDTM
             path = str(SAMPLE) if (use_samp or not file) else (file.name if hasattr(file, "name") else file)
             for text, final, extras in execute(path, subj, sd, anom):
                 if not final:
-                    yield {narration: text}
+                    yield {narration: warning + text}
                 else:
                     domains = extras["domains"]
                     yield {
-                        narration: text,
+                        narration: warning + text,
                         design_code: extras["design_json"],
                         domain_dd: gr.update(choices=domains, value=(domains[0] if domains else None)),
                         out_dir_state: extras["output_dir"],
@@ -170,6 +192,7 @@ def build_ui():
                     }
 
         def on_load_run(run_dir):
+            rbac.require_read()  # RBAC injection point: restoring a run is read-only (Statistician-safe)
             if not run_dir:
                 return {}
             data = load_run(run_dir)
@@ -183,7 +206,7 @@ def build_ui():
                 data_df: _load_domain_csv(data["output_dir"], domains[0] if domains else ""),
             }
 
-        run_btn.click(on_run, [file_in, use_sample, subjects, seed, anomalies],
+        run_btn.click(on_run, [file_in, use_sample, subjects, seed, anomalies, export_format],
                       [narration, design_code, domain_dd, out_dir_state, scorecard, data_df, history_dd])
         history_dd.change(on_load_run, [history_dd],
                           [narration, design_code, domain_dd, out_dir_state, scorecard, data_df])

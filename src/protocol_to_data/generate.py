@@ -24,7 +24,7 @@ ENROLLMENT_START = date(2026, 1, 15)
 
 # SDTM domains the builtin backend can emit. A planned domain outside this set can't be
 # generated standalone — the loop's repair step remaps or drops it (see validate coverage check).
-BUILTIN_DOMAINS = {"DM", "VS", "LB", "QS", "AE", "EX", "RS"}
+BUILTIN_DOMAINS = {"DM", "VS", "LB", "QS", "AE", "EX", "RS", "CM"}
 
 # ---------------------------------------------------------------- therapeutic-area profile
 
@@ -89,6 +89,8 @@ def _generate_builtin(design: ProtocolDesign, *, subjects: int, seed: int,
         _gen_rs(design, subs, rng).to_csv(out_dir / "rs.csv", index=False)
     if "AE" in planned:
         _gen_ae(design, subs, rng, profile).to_csv(out_dir / "ae.csv", index=False)
+    if "CM" in planned:
+        _gen_cm(design, subs, rng, profile).to_csv(out_dir / "cm.csv", index=False)
     if "EX" in planned:
         _gen_ex(design, subs, profile).to_csv(out_dir / "ex.csv", index=False)
 
@@ -331,27 +333,74 @@ def _gen_rs(design: ProtocolDesign, subs: list[dict], rng: random.Random) -> pd.
 
 # --------------------------------------------------------------------------- AE (by profile)
 
-_AE_TERMS = {
-    "cardiology": ["HEADACHE", "NAUSEA", "FATIGUE", "DIZZINESS", "HYPOTENSION"],
-    "oncology": ["FATIGUE", "NAUSEA", "DIARRHOEA", "ALOPECIA", "NEUTROPENIA", "ANAEMIA",
-                 "DECREASED APPETITE", "ALT INCREASED", "VOMITING",
-                 "PERIPHERAL SENSORY NEUROPATHY"],
+# Dictionary coding — (verbatim reported term → standardized dictionary term) pairs.
+# AETERM is the messy term as reported (e.g. "bad headache"); AEDECOD is the coded MedDRA
+# Preferred Term (e.g. "Headache"). For the hackathon this lightweight in-code lookup stands
+# in for dictionary coding — a production system would route each verbatim term through an
+# official MedDRA auto-encoder / API mapping service (and WHODrug for CM, below).
+_AE_CATALOG = {
+    "cardiology": [
+        ("bad headache", "Headache"), ("feeling sick", "Nausea"), ("very tired", "Fatigue"),
+        ("dizzy spells", "Dizziness"), ("low blood pressure", "Hypotension"),
+    ],
+    "oncology": [
+        ("very tired", "Fatigue"), ("feeling sick", "Nausea"), ("loose stools", "Diarrhoea"),
+        ("hair loss", "Alopecia"), ("low white cell count", "Neutropenia"),
+        ("low blood count", "Anaemia"), ("no appetite", "Decreased appetite"),
+        ("raised liver enzymes", "Alanine aminotransferase increased"),
+        ("throwing up", "Vomiting"), ("numb hands and feet", "Peripheral sensory neuropathy"),
+    ],
 }
 
 
 def _gen_ae(design: ProtocolDesign, subs: list[dict], rng: random.Random, profile: str) -> pd.DataFrame:
-    terms = _AE_TERMS[profile]
+    catalog = _AE_CATALOG[profile]
     rows = []
     for s in subs:
         seq = 0
         for _ in range(rng.randint(0, 3)):
             seq += 1
+            verbatim, decod = rng.choice(catalog)  # reported term → MedDRA-coded term
             # Onset on/after first dose — the loop's repair step depends on this invariant.
             onset = s["RFSTDTC"] + timedelta(days=rng.randint(1, 90))
             rows.append({
                 "STUDYID": design.study_id, "USUBJID": s["USUBJID"], "AESEQ": seq,
-                "AETERM": rng.choice(terms), "AESTDTC": onset.isoformat(),
+                "AETERM": verbatim, "AEDECOD": decod, "AESTDTC": onset.isoformat(),
                 "AESEV": rng.choice(["MILD", "MODERATE", "SEVERE"]),
+            })
+    return pd.DataFrame(rows)
+
+
+# --------------------------------------------------------------------------- CM (con-meds)
+
+# Concomitant medications: CMTRT is the reported drug name; CMDECOD is the WHODrug-coded
+# standardized name. Same hackathon stand-in as AE — production routes each verbatim drug
+# through an official WHODrug mapping service.
+_CM_CATALOG = {
+    "cardiology": [
+        ("lisinopril 10mg", "Lisinopril"), ("metoprolol", "Metoprolol"),
+        ("lasix", "Furosemide"), ("spironolactone", "Spironolactone"),
+        ("aspirin 81mg", "Acetylsalicylic acid"),
+    ],
+    "oncology": [
+        ("ondansetron", "Ondansetron"), ("dexamethasone", "Dexamethasone"),
+        ("tylenol", "Paracetamol"), ("omeprazole", "Omeprazole"), ("filgrastim", "Filgrastim"),
+    ],
+}
+
+
+def _gen_cm(design: ProtocolDesign, subs: list[dict], rng: random.Random, profile: str) -> pd.DataFrame:
+    catalog = _CM_CATALOG[profile]
+    rows = []
+    for s in subs:
+        seq = 0
+        for _ in range(rng.randint(0, 3)):
+            seq += 1
+            verbatim, decod = rng.choice(catalog)  # reported drug → WHODrug-coded name
+            start = s["RFSTDTC"] + timedelta(days=rng.randint(-30, 30))
+            rows.append({
+                "STUDYID": design.study_id, "USUBJID": s["USUBJID"], "CMSEQ": seq,
+                "CMTRT": verbatim, "CMDECOD": decod, "CMSTDTC": start.isoformat(),
             })
     return pd.DataFrame(rows)
 
