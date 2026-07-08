@@ -58,8 +58,12 @@
 
 `generate.py` supports two backends selected by config/flag:
 
-1. **`builtin`** (default, in-repo): a lean, dependency-light generator that produces
-   DM/VS/AE/LB/QS/EX with plausible clinical values. Good enough to demo the loop.
+1. **`builtin`** (default, in-repo): a lean, dependency-light, **therapeutic-area-aware**
+   generator that produces DM/VS/LB/QS/AE/EX (+ RS for oncology) with plausible clinical
+   values. It picks a clinical profile from the design's indication — a **cardiology**
+   default (NT-proBNP/KCCQ/NYHA) and an **oncology** profile (NSCLC lab panel + PK,
+   QLQ-C30/LC13 + EQ-5D-5L, arm-exact dosing, RECIST response) — so the same loop generates
+   indication-appropriate data. Good enough to demo the loop across therapeutic areas.
 2. **`engine-bridge`** (optional): shells out to the author's production engine
    (`protocol-synthetic-data-generation/scripts/engine.py`) for full 32-domain,
    clinically-rich output. Marked `ENGINE BRIDGE` in code; **not required** for the demo.

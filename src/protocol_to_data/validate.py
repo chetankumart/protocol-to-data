@@ -16,12 +16,21 @@ REQUIRED_COLUMNS = {
     "vs": {"USUBJID", "VSTESTCD", "VSORRES", "VSDTC"},
     "lb": {"USUBJID", "LBTESTCD", "LBORRES", "LBDTC"},
     "qs": {"USUBJID", "QSTESTCD", "QSORRES", "QSDTC"},
+    "rs": {"USUBJID", "RSTESTCD", "RSORRES", "RSDTC"},
     "ae": {"USUBJID", "AETERM", "AESTDTC"},
     "ex": {"USUBJID", "EXTRT", "EXSTDTC"},
 }
 
 VITAL_BOUNDS = {"SYSBP": (60, 260), "DIABP": (30, 160), "PULSE": (30, 200)}
-LAB_BOUNDS = {"NTPROBNP": (0, 35000), "CREAT": (0.2, 4.0), "HGB": (5, 22), "K": (2.0, 7.5)}
+LAB_BOUNDS = {
+    # cardiology
+    "NTPROBNP": (0, 35000), "CREAT": (0.2, 4.0), "HGB": (5, 22), "K": (2.0, 7.5),
+    # oncology hematology / chemistry / coagulation / thyroid (wide, physiologic guards)
+    "WBC": (0, 60), "NEUT": (0, 50), "LYM": (0, 20), "PLT": (0, 1200),
+    "ALT": (0, 700), "AST": (0, 700), "BILI": (0, 15), "ALP": (0, 500), "ALB": (1.0, 6.5),
+    "SODIUM": (120, 165), "CALCIUM": (6, 14),
+    "INR": (0.4, 8), "PT": (5, 60), "APTT": (10, 120), "TSH": (0, 25), "FT4": (0, 5),
+}
 
 
 def _count_out_of_range(df: pd.DataFrame, testcd_col: str, orres_col: str,

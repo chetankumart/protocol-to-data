@@ -117,10 +117,11 @@ agentic orchestration — extraction, repair, detection — is what's new.
 
 ## Honest limitations & what's next
 
-- The **builtin generator emits cardiovascular-flavored clinical values** (NT-proBNP, KCCQ,
-  NYHA) regardless of indication — great for the HFrEF demo, not for oncology. The detector
-  correctly flags this on the Amgen run. Next: therapeutic-area-aware panels (e.g. QLQ-C30 +
-  ANC/platelets for oncology), and the `engine-bridge` backend for full 32-domain breadth.
+- The **builtin generator is therapeutic-area-aware** — a cardiology profile (NT-proBNP,
+  KCCQ, NYHA) and an oncology/NSCLC profile (hematology/chemistry/coagulation/thyroid + PK
+  labs, QLQ-C30/LC13 + EQ-5D-5L, arm-exact dosing like AMG 510 960 mg QD vs Docetaxel
+  75 mg/m² Q3W, and RECIST response in the RS domain). Additional therapeutic areas and full
+  32-domain breadth come via the `engine-bridge` backend.
 - Extraction currently reads the first ~120K characters of very large protocols (the synopsis
   + schedule of activities); chunked full-document extraction is a natural extension.
 
