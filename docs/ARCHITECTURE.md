@@ -2,36 +2,21 @@
 
 ## The loop
 
-```
-                            ┌──────────────────────────────────────────────┐
-                            │                  ptd loop                     │
-                            │                                               │
-  protocol file ──────────▶│  1. INGEST   read pdf/html/txt → plain text    │
-  (pdf/html/md/txt)        │       │                                        │
-                           │       ▼                                        │
-                           │  2. EXTRACT  Claude → ProtocolDesign (typed)   │◀── prompts/extract_design.md
-                           │       │                                        │
-                           │       ▼                                        │
-                           │  3. PLAN     design → domain generation plan   │
-                           │       │        (which SDTM domains, n, visits) │
-                           │       ▼                                        │
-                           │  4. GENERATE synthetic CSVs per domain         │◀── ENGINE BRIDGE (optional)
-                           │       │                                        │
-                           │       ▼                                        │
-                           │  5. VALIDATE schema + clinical rule checks     │
-                           │       │                                        │
-                           │       ├── pass ─▶ 6. EMIT dataset + report     │
-                           │       │                                        │
-                           │       └── fail ─▶ 5a. REPAIR (Claude adjusts   │
-                           │                        design/params) ─┐       │
-                           │                                        │       │
-                           │                    ◀───────────────────┘       │
-                           │                    (bounded retries)           │
-                           └──────────────────────────────────────────────┘
-                                              │
-                                              ▼
-                          optional: 7. ANOMALY LOOP
-                              inject controlled errors ─▶ Claude detects & explains
+```mermaid
+flowchart TD
+    P["📄 Protocol<br/>(pdf / html / md / txt)"] --> I1["1 · INGEST<br/>read → plain text"]
+    I1 --> I2["2 · EXTRACT (Claude)<br/>text → ProtocolDesign (typed)"]:::claude
+    I2 --> I3["3 · PLAN<br/>which SDTM domains · n · visits"]
+    I3 --> I4["4 · GENERATE<br/>synthetic CSVs per domain"]
+    EB["ENGINE BRIDGE<br/>(optional backend)"] -. bridge .-> I4
+    I4 --> I5{"5 · VALIDATE<br/>schema · referential + temporal<br/>integrity · clinical rules"}
+    I5 -- pass --> I6["6 · EMIT<br/>dataset + validation report + run manifest"]
+    I5 -- fail --> I5a["5a · REPAIR (Claude)<br/>reads failures, adjusts design / params"]:::claude
+    I5a -- bounded retries --> I4
+    I6 --> A1["7 · ANOMALY LOOP<br/>inject controlled errors (seeded)"]
+    A1 --> A2["detect + explain (Claude)<br/>score N/N caught"]:::claude
+
+    classDef claude fill:#5b3df5,stroke:#3a24b3,color:#ffffff;
 ```
 
 ## Components

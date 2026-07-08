@@ -72,7 +72,9 @@ extract → generate → validate → **repair** loop stream live, then browse t
 CSVs and the anomaly scorecard. The UI reuses `run_loop` unchanged — it's presentation only.
 
 ![protocol-to-data web UI — the narrated loop shows Claude extracting the design, hitting a
-validation failure (planned domain EG has no data), self-repairing, and passing](docs/img/ui_demo.png)
+validation failure (planned domain EG has no data) and self-repairing to PASS, with the live
+🪙 run-cost badge, the Databricks-ready export format, and the generated AE table showing
+MedDRA dictionary coding (AETERM "bad headache" → AEDECOD "Headache")](docs/img/ui_demo.png)
 
 ## 🚀 Quickstart (Docker)
 
@@ -90,14 +92,23 @@ after code changes with `docker compose up --build`.
 
 ## Architecture (one loop)
 
+```mermaid
+flowchart TD
+    A["📄 Protocol<br/>(PDF / HTML / text)"] --> B["Ingest → text"]
+    B --> C["🧩 Extract<br/>ProtocolDesign (typed)"]:::claude
+    C --> D["🏭 Generate<br/>SDTM CSVs (deterministic)"]
+    D --> E{"🔎 Validate<br/>schema · referential + temporal<br/>integrity · clinical rules"}
+    E -- pass --> F["✅ Emit dataset<br/>+ run manifest + report"]
+    E -- fail --> G["🔧 Repair design<br/>(reads failures, adjusts)"]:::claude
+    G -- regenerate --> D
+    F --> H["🕵️ Inject controlled<br/>anomalies (seeded)"]
+    H --> I["🎯 Detect + explain<br/>score N/N caught"]:::claude
+
+    classDef claude fill:#5b3df5,stroke:#3a24b3,color:#ffffff;
 ```
- protocol ──▶ extract ──▶ ProtocolDesign ──▶ generate ──▶ dataset ──▶ validate ──┐
- (pdf/html/txt)  (Claude)     (pydantic)      (engine)     (CSVs)     (checks)    │
-                                                                                  │
-                        ◀── repair / regenerate on validation failure ◀───────────┘
-                                                     │
-                                    optional: inject anomalies ──▶ detect (Claude)
-```
+
+> Purple = Claude-driven reasoning (extract · repair · detect); the rest is deterministic
+> Python. The **repair edge** is what makes it an agent, not a pipeline.
 
 Full design: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) ·
 Spec: [`docs/SPEC.md`](docs/SPEC.md) ·
