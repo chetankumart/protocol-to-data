@@ -38,14 +38,14 @@ class LoopResult:
 def run_loop(protocol_path: str | Path, *, subjects: int, seed: int,
              out_root: str | Path = "data/output", backend: str = "builtin",
              max_repairs: int = 2, model: str = MODEL_REASON,
-             narrate: Optional[Narrator] = None) -> LoopResult:
+             narrate: Optional[Narrator] = None, use_cache: bool = True) -> LoopResult:
     say = narrate or _default_narrator
 
     say("🧬  Reading protocol ...")
     proto_sha = sha256_of(protocol_path)
 
     say("🧩  Extracting design (Claude) ...")
-    design = extract_design(protocol_path, model=model, narrate=say)
+    design = extract_design(protocol_path, model=model, narrate=say, use_cache=use_cache)
     if subjects:
         design.population.n_subjects = subjects
     say(f"    → {design.study_id}: {len(design.arms)} arms, {len(design.visits)} visits, "

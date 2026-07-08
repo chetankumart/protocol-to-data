@@ -22,8 +22,9 @@ sys.path.insert(0, str(_ROOT / "src"))
 
 import cli  # noqa: E402  — reuse its .env loader
 from protocol_to_data.anomalies import (  # noqa: E402
-    detect_anomalies, inject_anomalies, score_detections,
+    detect_anomalies, inject_anomalies, score_detections, scorecard_markdown,
 )
+from protocol_to_data.history import list_runs, load_run, run_label, save_run  # noqa: E402
 from protocol_to_data.loop import run_loop  # noqa: E402
 
 cli._load_dotenv()
@@ -59,6 +60,18 @@ def execute(protocol_path: str, subjects: int, seed: int, anomalies: int):
                 for f in findings:
                     narrate(f"    • [{f.anomaly_type}] {f.domain}: {f.description}")
                 holder["score"] = score_detections(truth, findings)
+            # snapshot the completed run into runs/<timestamp>/ for the history dropdown
+            try:
+                score = holder.get("score")
+                run_dir = save_run(
+                    res.design, res.output_dir, subjects=int(subjects), seed=int(seed),
+                    scorecard_md=scorecard_markdown(score),
+                    caught=(score["caught"] if score else None),
+                    total=(score["total"] if score else None),
+                )
+                narrate(f"\n💾  Saved run → runs/{run_dir.name}")
+            except Exception:  # noqa: BLE001 — history is best-effort, never fail the run
+                pass
         except Exception as e:  # noqa: BLE001 — surface any failure in the narration pane
             narrate(f"\n❌  Error: {type(e).__name__}: {e}")
         finally:
@@ -87,21 +100,8 @@ def _final_payload(holder: dict) -> dict:
         "design_json": res.design.model_dump_json(indent=2),
         "domains": domains,
         "output_dir": str(out_dir),
-        "scorecard": _scorecard_md(holder.get("score")),
+        "scorecard": scorecard_markdown(holder.get("score")),
     }
-
-
-def _scorecard_md(score: dict | None) -> str:
-    if not score:
-        return "_No anomaly loop run (set anomalies > 0)._"
-    lines = [f"### 🎯 Claude caught **{score['caught']}/{score['total']}** injected anomalies"]
-    if score["missed"]:
-        lines.append("\n**Missed:**")
-        lines += [f"- {t['type']} in {t['domain']} ({t.get('usubjid')})" for t in score["missed"]]
-    if score["extra"]:
-        lines.append("\n**Extra findings** (beyond the planted defects — Claude reasoning about the data):")
-        lines += [f"- [{f.anomaly_type}] {f.domain}: {f.description}" for f in score["extra"]]
-    return "\n".join(lines)
 
 
 def _load_domain_csv(output_dir: str, domain: str):
@@ -109,6 +109,11 @@ def _load_domain_csv(output_dir: str, domain: str):
         return pd.DataFrame()
     p = Path(output_dir) / f"{domain.lower()}.csv"
     return pd.read_csv(p).head(200) if p.exists() else pd.DataFrame()
+
+
+def _run_choices() -> list[tuple[str, str]]:
+    """(label, run_dir) pairs for the history dropdown, newest first."""
+    return [(run_label(m), m["dir"]) for m in list_runs()]
 
 
 def build_ui():
@@ -133,6 +138,8 @@ def build_ui():
                 seed = gr.Number(value=42, precision=0, label="Seed (reproducible)")
                 anomalies = gr.Slider(0, 5, value=5, step=1, label="Anomalies to inject + detect")
                 run_btn = gr.Button("▶  Run the loop", variant="primary")
+                history_dd = gr.Dropdown(label="📁 Load a previous run", choices=_run_choices(),
+                                         value=None, interactive=True)
             with gr.Column(scale=2):
                 narration = gr.Textbox(label="Live agent narration", lines=18,
                                        max_lines=18, interactive=False, autoscroll=True)
@@ -159,10 +166,27 @@ def build_ui():
                         out_dir_state: extras["output_dir"],
                         scorecard: extras["scorecard"],
                         data_df: _load_domain_csv(extras["output_dir"], domains[0] if domains else ""),
+                        history_dd: gr.update(choices=_run_choices()),  # surface the just-saved run
                     }
 
+        def on_load_run(run_dir):
+            if not run_dir:
+                return {}
+            data = load_run(run_dir)
+            domains = data["domains"]
+            return {
+                narration: f"📁  Restored saved run: {Path(run_dir).name}",
+                design_code: data["design_json"],
+                domain_dd: gr.update(choices=domains, value=(domains[0] if domains else None)),
+                out_dir_state: data["output_dir"],
+                scorecard: data["scorecard"],
+                data_df: _load_domain_csv(data["output_dir"], domains[0] if domains else ""),
+            }
+
         run_btn.click(on_run, [file_in, use_sample, subjects, seed, anomalies],
-                      [narration, design_code, domain_dd, out_dir_state, scorecard, data_df])
+                      [narration, design_code, domain_dd, out_dir_state, scorecard, data_df, history_dd])
+        history_dd.change(on_load_run, [history_dd],
+                          [narration, design_code, domain_dd, out_dir_state, scorecard, data_df])
         domain_dd.change(_load_domain_csv, [out_dir_state, domain_dd], data_df)
 
     return demo

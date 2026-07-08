@@ -15,6 +15,9 @@ env/
 # Semantic extraction cache (content-addressed by document hash)
 .cache/
 
+# Timestamped run history (durable snapshots for the UI "Load Previous Run")
+runs/
+
 # Generated data (keep dirs via .gitkeep, ignore contents)
 data/output/*
 !data/output/.gitkeep

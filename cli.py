@@ -43,19 +43,35 @@ def cmd_run(a: argparse.Namespace) -> int:
     from protocol_to_data.loop import run_loop
 
     result = run_loop(a.protocol, subjects=a.subjects, seed=a.seed,
-                      out_root=a.out_root, backend=a.backend, max_repairs=a.max_repairs)
+                      out_root=a.out_root, backend=a.backend, max_repairs=a.max_repairs,
+                      use_cache=not a.no_cache)
     print(f"\n📁  Dataset → {result.output_dir}")
     print(f"    repairs: {result.repair_attempts} · validation passed: {result.report.passed}")
 
-    if a.anomalies:
-        _run_anomalies(result.design, result.output_dir, count=a.anomalies, seed=a.seed)
+    score = _run_anomalies(result.design, result.output_dir, count=a.anomalies,
+                           seed=a.seed) if a.anomalies else None
+    _archive_run(result, a, score)
     return 0 if result.report.passed else 1
+
+
+def _archive_run(result, a, score) -> None:
+    """Snapshot a completed CLI run into runs/<timestamp>/ (best-effort)."""
+    try:
+        from protocol_to_data.anomalies import scorecard_markdown
+        from protocol_to_data.history import save_run
+        run_dir = save_run(result.design, result.output_dir, subjects=a.subjects, seed=a.seed,
+                           scorecard_md=scorecard_markdown(score),
+                           caught=(score["caught"] if score else None),
+                           total=(score["total"] if score else None))
+        print(f"💾  Saved run → runs/{run_dir.name}")
+    except Exception:  # noqa: BLE001 — history is best-effort
+        pass
 
 
 def cmd_extract(a: argparse.Namespace) -> int:
     from protocol_to_data.extract import extract_design
 
-    design = extract_design(a.protocol, narrate=print)
+    design = extract_design(a.protocol, narrate=print, use_cache=not a.no_cache)
     out = a.output or "design.json"
     Path(out).write_text(design.model_dump_json(indent=2))
     print(f"🧩  Design → {out}  ({design.study_id}: {len(design.domains)} domains)")
@@ -96,7 +112,7 @@ def cmd_anomalies(a: argparse.Namespace) -> int:
     return 0
 
 
-def _run_anomalies(design, data_dir, *, count: int, seed: int) -> None:
+def _run_anomalies(design, data_dir, *, count: int, seed: int) -> dict:
     from protocol_to_data.anomalies import detect_anomalies, inject_anomalies, score_detections
 
     print(f"\n🕵️  Injecting {count} anomalies (seed {seed}) ...")
@@ -113,6 +129,7 @@ def _run_anomalies(design, data_dir, *, count: int, seed: int) -> None:
     print(f"\n🎯  Claude caught {score['caught']}/{score['total']} injected anomalies")
     for t in score["missed"]:
         print(f"    • MISSED {t['type']} in {t['domain']} ({t.get('usubjid')})")
+    return score
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -127,11 +144,15 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--backend", choices=["builtin", "engine-bridge"], default="builtin")
     r.add_argument("--max-repairs", type=int, default=2)
     r.add_argument("--anomalies", type=int, default=0, help="inject+detect K anomalies after run")
+    r.add_argument("--no-cache", action="store_true",
+                   help="skip the extraction cache — force a fresh Claude call (e.g. live demos)")
     r.set_defaults(func=cmd_run)
 
     e = sub.add_parser("extract", help="protocol → design.json")
     e.add_argument("protocol")
     e.add_argument("-o", "--output")
+    e.add_argument("--no-cache", action="store_true",
+                   help="skip the extraction cache — force a fresh Claude call")
     e.set_defaults(func=cmd_extract)
 
     g = sub.add_parser("generate", help="design.json → CSVs")
