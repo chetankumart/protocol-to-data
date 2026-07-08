@@ -24,7 +24,7 @@ ENROLLMENT_START = date(2026, 1, 15)
 
 # SDTM domains the builtin backend can emit. A planned domain outside this set can't be
 # generated standalone — the loop's repair step remaps or drops it (see validate coverage check).
-BUILTIN_DOMAINS = {"DM", "VS", "LB", "QS", "AE", "EX", "RS", "PC"}
+BUILTIN_DOMAINS = {"DM", "VS", "LB", "QS", "AE", "EX", "RS"}
 
 # ---------------------------------------------------------------- therapeutic-area profile
 
@@ -87,8 +87,6 @@ def _generate_builtin(design: ProtocolDesign, *, subjects: int, seed: int,
         qs(design, subs, rng).to_csv(out_dir / "qs.csv", index=False)
     if "RS" in planned:
         _gen_rs(design, subs, rng).to_csv(out_dir / "rs.csv", index=False)
-    if "PC" in planned:
-        _gen_pc(design, subs, rng).to_csv(out_dir / "pc.csv", index=False)
     if "AE" in planned:
         _gen_ae(design, subs, rng, profile).to_csv(out_dir / "ae.csv", index=False)
     if "EX" in planned:
@@ -199,7 +197,7 @@ _ONC_LB_PANEL = [
 
 def _gen_lb_oncology(design: ProtocolDesign, subs: list[dict], rng: random.Random) -> pd.DataFrame:
     """NSCLC labs: full panel + arm-specific drug effects (docetaxel myelosuppression,
-    sotorasib transaminitis). PK concentrations live in the PC domain (see `_gen_pc`)."""
+    sotorasib transaminitis) + a plasma PK concentration at each treatment visit."""
     visits = _ordered_visits(design)
     rows = []
     seq = {}
@@ -212,52 +210,30 @@ def _gen_lb_oncology(design: ProtocolDesign, subs: list[dict], rng: random.Rando
             for tc, unit, mean, sd, dec in _ONC_LB_PANEL:
                 val = rng.gauss(mean, sd)
                 if docetaxel and tc == "NEUT":
-                    val *= max(1 - 0.15 * min(i, 3), 0.40)   # neutropenia (kept ≥ grade 3)
+                    val *= max(1 - 0.15 * min(i, 3), 0.30)   # neutropenia nadir
                 elif docetaxel and tc == "PLT":
                     val *= max(1 - 0.10 * min(i, 3), 0.40)   # thrombocytopenia
                 elif sotorasib and tc in ("ALT", "AST"):
                     val *= min(1 + 0.18 * min(i, 4), 2.5)    # hepatotoxicity signal
-                floor = 0.5 if tc == "NEUT" else 0.0         # ANC ≥ 0.5 (avoid grade-4)
                 seq[s["USUBJID"]] = seq.get(s["USUBJID"], 0) + 1
                 rows.append({
                     "STUDYID": design.study_id, "USUBJID": s["USUBJID"],
                     "LBSEQ": seq[s["USUBJID"]], "LBCAT": "CHEMISTRY/HEMATOLOGY",
                     "VISIT": getattr(v, "name", "VISIT"),
-                    "LBTESTCD": tc, "LBORRES": round(max(val, floor), dec), "LBORRESU": unit,
+                    "LBTESTCD": tc, "LBORRES": round(max(val, 0.0), dec), "LBORRESU": unit,
                     "LBDTC": vdate.isoformat(),
                 })
-    return pd.DataFrame(rows)
-
-
-def _gen_pc(design: ProtocolDesign, subs: list[dict], rng: random.Random) -> pd.DataFrame:
-    """PK (Pharmacokinetics Concentrations) — plasma drug concentration at treatment visits.
-
-    Placebo subjects have no PK. Known study drugs get realistic Cmax-ish means; any other
-    active drug gets a generic concentration keyed to the arm name.
-    """
-    visits = [v for v in _ordered_visits(design) if not getattr(v, "is_screening", False)]
-    rows = []
-    seq = {}
-    for s in subs:
-        if s["IS_PLACEBO"]:
-            continue
-        name = s["ARM"].lower()
-        if "amg" in name or "sotorasib" in name:
-            analyte, mean, sd = "SOTORASIB", 900, 350
-        elif "docetaxel" in name:
-            analyte, mean, sd = "DOCETAXEL", 2200, 800
-        else:
-            analyte, mean, sd = (s["ARM"].upper().replace(" ", "")[:8] or "DRUG"), 500, 200
-        for v in visits:
-            vdate = _visit_date(s["RFSTDTC"], getattr(v, "day", 1))
-            seq[s["USUBJID"]] = seq.get(s["USUBJID"], 0) + 1
-            rows.append({
-                "STUDYID": design.study_id, "USUBJID": s["USUBJID"],
-                "PCSEQ": seq[s["USUBJID"]], "PCTESTCD": analyte, "PCTEST": f"{analyte} concentration",
-                "VISIT": getattr(v, "name", "VISIT"),
-                "PCORRES": round(max(rng.gauss(mean, sd), 0.0), 0), "PCORRESU": "ng/mL",
-                "PCDTC": vdate.isoformat(),
-            })
+            # PK concentration on treatment visits (post first dose)
+            if not getattr(v, "is_screening", False) and (docetaxel or sotorasib):
+                tc, mean, sd = (("SOTORASIB", 900, 350) if sotorasib else ("DOCETAXEL", 2200, 800))
+                seq[s["USUBJID"]] = seq.get(s["USUBJID"], 0) + 1
+                rows.append({
+                    "STUDYID": design.study_id, "USUBJID": s["USUBJID"],
+                    "LBSEQ": seq[s["USUBJID"]], "LBCAT": "PK",
+                    "VISIT": getattr(v, "name", "VISIT"),
+                    "LBTESTCD": tc, "LBORRES": round(max(rng.gauss(mean, sd), 0.0), 0),
+                    "LBORRESU": "ng/mL", "LBDTC": vdate.isoformat(),
+                })
     return pd.DataFrame(rows)
 
 

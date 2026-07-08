@@ -17,7 +17,6 @@ REQUIRED_COLUMNS = {
     "lb": {"USUBJID", "LBTESTCD", "LBORRES", "LBDTC"},
     "qs": {"USUBJID", "QSTESTCD", "QSORRES", "QSDTC"},
     "rs": {"USUBJID", "RSTESTCD", "RSORRES", "RSDTC"},
-    "pc": {"USUBJID", "PCTESTCD", "PCORRES", "PCDTC"},
     "ae": {"USUBJID", "AETERM", "AESTDTC"},
     "ex": {"USUBJID", "EXTRT", "EXSTDTC"},
 }
