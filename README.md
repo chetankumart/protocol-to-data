@@ -71,6 +71,9 @@ Upload a protocol (or use the bundled sample), set subjects/seed/anomalies, and 
 extract → generate → validate → **repair** loop stream live, then browse the generated SDTM
 CSVs and the anomaly scorecard. The UI reuses `run_loop` unchanged — it's presentation only.
 
+![protocol-to-data web UI — the narrated loop shows Claude extracting the design, hitting a
+validation failure (planned domain EG has no data), self-repairing, and passing](docs/img/ui_demo.png)
+
 ## Architecture (one loop)
 
 ```
