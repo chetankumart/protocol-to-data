@@ -67,6 +67,15 @@ def _client():
     return Anthropic(api_key=api_key)
 
 
+# Adaptive-thinking models (Opus 4.8/4.7, Sonnet 5, Fable 5) REMOVED sampling params —
+# sending `temperature`/`top_p` returns a 400. We only pass temperature=0.0 to models that
+# still accept it; on the removed-sampling models determinism is guided by the prompt + the
+# JSON-only system instruction instead (setting temperature there would break the call).
+_SAMPLING_REMOVED = {
+    "claude-opus-4-8", "claude-opus-4-7", "claude-sonnet-5", "claude-fable-5", "claude-mythos-5",
+}
+
+
 def complete(prompt: str, *, model: str = MODEL_REASON, max_tokens: int = 4096,
              system: str | None = None) -> str:
     """Return Claude's text response for a single-turn prompt."""
@@ -75,6 +84,8 @@ def complete(prompt: str, *, model: str = MODEL_REASON, max_tokens: int = 4096,
                                   messages=[{"role": "user", "content": prompt}])
     if system:
         kwargs["system"] = system
+    if model not in _SAMPLING_REMOVED:
+        kwargs["temperature"] = 0.0  # deterministic extraction on models that accept sampling
     resp = client.messages.create(**kwargs)
     _record_usage(model, getattr(resp, "usage", None))
     return "".join(block.text for block in resp.content if getattr(block, "type", None) == "text")

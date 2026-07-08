@@ -35,7 +35,7 @@ SAMPLE = _ROOT / "examples" / "sample_protocol.md"
 
 # Target export formats. Only SDTM is implemented; the EDC ODM-XML targets are demo stubs
 # that surface a roadmap notice and fall back to SDTM (no XML generation is built).
-EXPORT_SDTM = "SDTM (CSV/Parquet) - Analytics Ready"
+EXPORT_SDTM = "SDTM (Parquet) - Databricks Analytics Ready"
 EXPORT_FORMATS = [
     EXPORT_SDTM,
     "CDASH (ODM XML) - Medidata Rave",

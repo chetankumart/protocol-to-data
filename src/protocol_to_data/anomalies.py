@@ -114,6 +114,7 @@ def _inject_pregnancy_male(data_dir: Path, rng) -> dict | None:
         "USUBJID": uid,
         "AESEQ": (int(ae["AESEQ"].max()) + 1) if ("AESEQ" in ae.columns and not ae.empty) else 1,
         "AETERM": "PREGNANCY",
+        "AEDECOD": "Pregnancy",  # MedDRA-coded even for the injected defect
         "AESTDTC": onset,
         "AESEV": "MODERATE",
     })

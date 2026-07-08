@@ -4,11 +4,12 @@ import sys
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from protocol_to_data.generate import (  # noqa: E402
-    _enforce_referential_integrity, generate_dataset,
+    _enforce_referential_integrity, _profile_for, generate_dataset,
 )
 from protocol_to_data.schemas import (  # noqa: E402
     Arm, DomainPlan, Population, ProtocolDesign, Visit,
@@ -61,3 +62,25 @@ def test_enforce_drops_orphan_rows(tmp_path):
     _enforce_referential_integrity(frames)  # must not raise; drops the orphan
     assert set(frames["lb"]["USUBJID"]) == {"S1", "S2"}
     assert len(frames["lb"]) == 2
+
+
+def test_enforce_rejects_inconsistent_visitnum():
+    """Same VISIT mapped to different VISITNUMs across domains must fail the guard."""
+    dm = pd.DataFrame({"USUBJID": ["S1"]})
+    vs = pd.DataFrame({"USUBJID": ["S1"], "VISIT": ["Baseline"], "VISITNUM": [2.0]})
+    lb = pd.DataFrame({"USUBJID": ["S1"], "VISIT": ["Baseline"], "VISITNUM": [3.0]})  # drift!
+    with pytest.raises(AssertionError):
+        _enforce_referential_integrity({"dm": dm, "vs": vs, "lb": lb})
+
+
+def test_profile_dispatch_does_not_misfire_on_generic_terms():
+    # "tumor necrosis factor" must NOT trigger oncology on a cardiology protocol
+    cardio = ProtocolDesign(
+        study_id="HF-TNF", therapeutic_area="Cardiovascular",
+        indication="Heart failure; elevated tumor necrosis factor alpha",
+        domains=[DomainPlan(domain="DM")])
+    assert _profile_for(cardio) == "cardiology"
+    # a real oncology study still resolves to oncology (via therapeutic_area)
+    onc = ProtocolDesign(study_id="ONC", therapeutic_area="Oncology", indication="NSCLC",
+                         domains=[DomainPlan(domain="DM")])
+    assert _profile_for(onc) == "oncology"

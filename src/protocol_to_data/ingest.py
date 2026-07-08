@@ -16,7 +16,13 @@ def sha256_of(path: str | Path) -> str:
 
 
 def load_protocol_text(path: str | Path) -> str:
-    """Return normalized plain text for a protocol file."""
+    """Return normalized plain text for a protocol file.
+
+    PRIVACY GUARDRAIL (production): protocols are design documents and should be PHI-free, but
+    this is the trust boundary before text reaches the LLM. In production, route the extracted
+    text through an enterprise PHI/PII sanitizer (de-identification / redaction) here — before
+    it is sent to any external model — and log the scrub for audit.
+    """
     path = Path(path)
     suffix = path.suffix.lower()
 

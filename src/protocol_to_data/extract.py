@@ -104,18 +104,22 @@ def _build_prompt(text: str) -> str:
 
 
 def _extract_via_json(prompt: str, *, model: str, say: Narrator) -> ProtocolDesign:
-    """Fallback: raw JSON mode, with one repair pass if the first result is schema-invalid."""
-    raw = complete_json(prompt, model=model, max_tokens=6000)
+    """JSON-forced extraction with defensive parsing.
+
+    `complete_json` forces JSON-only output (system instruction) and tolerates fenced/prose
+    wrapping. We then validate against the schema; if the first result is *unparseable*
+    (JSONDecodeError ⊂ ValueError) OR schema-invalid (ValidationError), one repair pass feeds
+    the error back to Claude. A second failure is allowed to surface rather than fake a design.
+    """
     try:
-        return ProtocolDesign.model_validate(raw)
-    except ValidationError as e:
-        say("    → first extraction failed validation; asking Claude to correct it")
+        return ProtocolDesign.model_validate(complete_json(prompt, model=model, max_tokens=6000))
+    except (ValidationError, ValueError) as e:
+        say("    → first extraction unparseable/invalid; asking Claude to correct it")
         repair_prompt = (
-            f"{prompt}\n\nYour previous JSON did not match the schema. Errors:\n{e}\n\n"
-            "Return corrected JSON only."
+            f"{prompt}\n\nYour previous response did not parse as valid JSON matching the "
+            f"schema. Errors:\n{e}\n\nReturn corrected, valid JSON only — no prose, no fences."
         )
-        raw = complete_json(repair_prompt, model=model, max_tokens=6000)
-        return ProtocolDesign.model_validate(raw)  # let a second failure surface
+        return ProtocolDesign.model_validate(complete_json(repair_prompt, model=model, max_tokens=6000))
 
 
 def normalize_design(design: ProtocolDesign) -> ProtocolDesign:

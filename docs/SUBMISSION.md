@@ -10,7 +10,8 @@
 
 ## Tagline
 
-**From a clinical trial protocol to an analyzable synthetic dataset — in one agentic loop, driven by Claude.**
+**From a clinical trial protocol to a Databricks-ready synthetic SDTM dataset — in one agentic
+loop, driven by Claude. Build your analytics pipelines before the EDC even exists.**
 
 ## The problem
 
@@ -25,6 +26,20 @@ A protocol *already contains* the full data-generation spec — arms, visit sche
 endpoints, populations, assessments. It's just locked in prose. **Claude is very good at
 reading that prose and emitting a structured design.** Once the design is structured,
 generation and validation can be automated and self-correcting.
+
+## From protocol to lakehouse — accelerate analytics before the EDC exists
+
+This is the business value in one line: **you don't need a live EDC to start analytics.**
+In a normal program, biostatistics and data engineering can't build or validate their SAP
+and analysis pipelines until a Medidata Rave or Veeva Vault EDC is stood up and the study
+database is designed — months of critical-path setup. `protocol-to-data` breaks that
+dependency. From the protocol alone it emits **SDTM-shaped, referentially-sound Parquet that
+lands directly in a Databricks / Spark lakehouse on day one.** Teams build and test their
+ingestion, transformation, and analysis pipelines against realistic, PHI-free, seed-
+reproducible data **before the EDC is built** — then swap in real clinical extracts at
+database lock with zero pipeline rework. The EDC ODM-XML export targets (Rave, Veeva) are on
+the v2 roadmap; the **Databricks analytics path is the value delivered today** — which is why
+"SDTM (Parquet) – Databricks Analytics Ready" is the default export format in the UI.
 
 ## What it does
 
@@ -112,8 +127,9 @@ agentic orchestration — extraction, repair, detection — is what's new.
 - Deterministic: `(protocol, seed, subjects)` → identical output; `run_manifest.json` records
   protocol hash, design, seed, model id, and backend.
 - Runs standalone with just `pip install -r requirements.txt` + an API key — no private deps.
-- 23 offline tests (no key needed) cover schemas, generation/trajectories, validation, the
-  repair loop, and anomaly injection/scoring.
+- A comprehensive offline test suite (no API key needed) covers schemas, generation/
+  trajectories, referential + temporal integrity, dictionary coding, validation, the repair
+  loop, anomaly injection/scoring, caching, run history, and cost accounting.
 
 ## Enterprise readiness
 
@@ -133,12 +149,18 @@ lean, but showing the shape of production:
   hackathon, not enforced — but the seams are where they belong.
 - **Dictionary-coded SDTM (clinical fidelity).** AE carries `AEDECOD` (MedDRA) beside the
   verbatim `AETERM` ("bad headache" → "Headache"); the CM domain carries `CMDECOD`
-  (WHODrug, "lasix" → "Furosemide"). A lightweight coder stands in for what production would
-  route through an official MedDRA/WHODrug mapping service.
-- **EDC-target awareness.** The UI's **Target Export Format** selector offers SDTM
-  (implemented) plus CDASH ODM-XML targets for Medidata Rave and Veeva Vault EDC — which
-  surface a v2-roadmap notice and fall back to SDTM, showing awareness of the downstream EDC
-  ecosystem without over-building it.
+  (WHODrug, "lasix" → "Furosemide"). Coding is a **deterministic dictionary coder**
+  (`code_term(verbatim, dictionary)`) — an offline, reproducible stand-in that production
+  replaces with an official MedDRA/WHODrug auto-encoder API. It is not a zero-shot LLM call.
+- **Relational integrity (SDTM traceability).** Generation enforces both foreign keys before
+  writing: every child-domain `USUBJID` must exist in DM (orphan rows dropped + asserted),
+  and `VISIT ↔ VISITNUM` is asserted as a single consistent 1:1 mapping across VS/LB/QS/RS
+  (the same timepoint carries the same VISITNUM everywhere) — zero dangling keys on either axis.
+- **EDC-target awareness + Databricks-first export.** The UI's **Target Export Format**
+  selector defaults to **"SDTM (Parquet) – Databricks Analytics Ready"** (the value delivered
+  today) plus CDASH ODM-XML targets for Medidata Rave and Veeva Vault EDC — which surface a
+  v2-roadmap notice and fall back to SDTM, showing awareness of the downstream EDC ecosystem
+  without over-building it.
 
 ## Honest limitations & what's next
 
@@ -155,4 +177,7 @@ lean, but showing the shape of production:
 A practical tool for researchers, clinics, and biotech that outlasts the week; Claude is the
 orchestrator across extraction, repair, and clinical-plausibility reasoning; safe and
 shareable (100% synthetic, PHI-free, seed-reproducible); and it demonstrably generalizes
-across therapeutic areas — from a cardiology sample to a real 179-page oncology protocol.
+across therapeutic areas — from a cardiology sample to a real 179-page oncology protocol. And
+it has a clear GTM: **it collapses the critical path to analytics by producing
+Databricks-ready SDTM data before a Medidata/Veeva EDC is ever stood up** — turning months of
+sequential setup into parallel work.

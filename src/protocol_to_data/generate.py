@@ -28,15 +28,27 @@ BUILTIN_DOMAINS = {"DM", "VS", "LB", "QS", "AE", "EX", "RS", "CM"}
 
 # ---------------------------------------------------------------- therapeutic-area profile
 
+# Authoritative therapeutic-area signals (checked on the `therapeutic_area` field first).
+_ONCOLOGY_TA = ("oncolog", "cancer")
+# Specific indication/title keywords — deliberately NOT bare "tumor"/"tumour", which appear
+# in non-oncology contexts (e.g. "tumor necrosis factor" in cardiology/immunology).
 _ONCOLOGY_KEYWORDS = (
-    "oncolog", "cancer", "tumor", "tumour", "nsclc", "carcinoma", "metasta",
-    "neoplas", "lymphoma", "leukem", "melanoma", "sarcoma", "adenocarcinoma", "kras",
+    "oncolog", "cancer", "nsclc", "carcinoma", "metasta", "neoplasm", "malignan",
+    "lymphoma", "leukemia", "leukaemia", "melanoma", "sarcoma", "adenocarcinoma",
+    "kras p.g12c", "solid tumor", "solid tumour", "tumor response", "recist",
 )
 
 
 def _profile_for(design: ProtocolDesign) -> str:
-    """Pick a clinical profile from the design. Defaults to cardiology (the CARDIO-HF demo)."""
-    text = f"{design.therapeutic_area} {design.indication} {design.title}".lower()
+    """Pick a clinical profile from the design. Defaults to cardiology (the CARDIO-HF demo).
+
+    The `therapeutic_area` field is authoritative; otherwise we require a *specific* oncology
+    keyword in the indication/title so a stray generic term can't falsely trigger oncology.
+    """
+    ta = (design.therapeutic_area or "").lower()
+    if any(k in ta for k in _ONCOLOGY_TA):
+        return "oncology"
+    text = f"{design.indication} {design.title}".lower()
     return "oncology" if any(k in text for k in _ONCOLOGY_KEYWORDS) else "cardiology"
 
 
@@ -117,11 +129,17 @@ def _generate_builtin(design: ProtocolDesign, *, subjects: int, seed: int,
 
 
 def _enforce_referential_integrity(frames: dict[str, pd.DataFrame]) -> None:
-    """SDTM traceability guard: every child-domain USUBJID must exist in DM.
+    """SDTM traceability guard for both keys — subject (USUBJID) and timepoint (VISITNUM).
 
-    Auto-repairs by dropping orphan rows, then asserts zero orphans remain before the
-    datasets are written — so the output is always a valid relational set (no dangling FKs).
+    1. Subject FK: every child-domain USUBJID must exist in DM. Orphan rows are dropped to
+       auto-repair, then a zero-orphan assertion runs before anything is written.
+    2. Timepoint FK: VISIT ↔ VISITNUM must be a single consistent 1:1 mapping across every
+       longitudinal domain — the same clinical timepoint carries the same VISITNUM in VS, LB,
+       QS and RS, and no VISITNUM maps to more than one visit (no orphan timepoints).
+
+    The result is always a valid relational set (no dangling foreign keys on either axis).
     """
+    # 1. subject referential integrity
     dm_ids = set(frames["dm"]["USUBJID"])
     for name in list(frames):
         if name == "dm":
@@ -133,6 +151,18 @@ def _enforce_referential_integrity(frames: dict[str, pd.DataFrame]) -> None:
         if not keep.all():
             frames[name] = df[keep].reset_index(drop=True)  # drop orphan rows to repair
         assert set(frames[name]["USUBJID"]) <= dm_ids, f"orphan USUBJID remains in {name}"
+
+    # 2. temporal referential integrity — VISIT ↔ VISITNUM bijection across all domains
+    visit_to_num: dict = {}
+    num_to_visit: dict = {}
+    for name, df in frames.items():
+        if df.empty or not {"VISIT", "VISITNUM"}.issubset(df.columns):
+            continue
+        for visit, num in df[["VISIT", "VISITNUM"]].drop_duplicates().itertuples(index=False):
+            assert visit_to_num.setdefault(visit, num) == num, \
+                f"VISIT {visit!r} has an inconsistent VISITNUM in {name}"
+            assert num_to_visit.setdefault(num, visit) == visit, \
+                f"VISITNUM {num} maps to more than one visit (orphan timepoint in {name})"
 
 
 def _make_subjects(design: ProtocolDesign, n: int, rng: random.Random) -> list[dict]:
@@ -374,34 +404,57 @@ def _gen_rs(design: ProtocolDesign, subs: list[dict], rng: random.Random) -> pd.
 
 # --------------------------------------------------------------------------- AE (by profile)
 
-# Dictionary coding — (verbatim reported term → standardized dictionary term) pairs.
-# AETERM is the messy term as reported (e.g. "bad headache"); AEDECOD is the coded MedDRA
-# Preferred Term (e.g. "Headache"). For the hackathon this lightweight in-code lookup stands
-# in for dictionary coding — a production system would route each verbatim term through an
-# official MedDRA auto-encoder / API mapping service (and WHODrug for CM, below).
-_AE_CATALOG = {
-    "cardiology": [
-        ("bad headache", "Headache"), ("feeling sick", "Nausea"), ("very tired", "Fatigue"),
-        ("dizzy spells", "Dizziness"), ("low blood pressure", "Hypotension"),
-    ],
-    "oncology": [
-        ("very tired", "Fatigue"), ("feeling sick", "Nausea"), ("loose stools", "Diarrhoea"),
-        ("hair loss", "Alopecia"), ("low white cell count", "Neutropenia"),
-        ("low blood count", "Anaemia"), ("no appetite", "Decreased appetite"),
-        ("raised liver enzymes", "Alanine aminotransferase increased"),
-        ("throwing up", "Vomiting"), ("numb hands and feet", "Peripheral sensory neuropathy"),
-    ],
+# Dictionary coding — a DETERMINISTIC DICTIONARY STAND-IN (not a zero-shot LLM call).
+# `code_term` maps a verbatim reported term to its standardized dictionary term: a MedDRA
+# Preferred Term for AE (AETERM "bad headache" → AEDECOD "Headache"), a WHODrug preferred
+# name for CM. In production this call routes each verbatim through an official
+# MedDRA / WHODrug auto-encoder API; the offline dictionaries below stand in so the demo has
+# no external dependency and stays fully reproducible.
+_AE_DICTIONARY = {
+    "cardiology": {
+        "bad headache": "Headache", "feeling sick": "Nausea", "very tired": "Fatigue",
+        "dizzy spells": "Dizziness", "low blood pressure": "Hypotension",
+    },
+    "oncology": {
+        "very tired": "Fatigue", "feeling sick": "Nausea", "loose stools": "Diarrhoea",
+        "hair loss": "Alopecia", "low white cell count": "Neutropenia",
+        "low blood count": "Anaemia", "no appetite": "Decreased appetite",
+        "raised liver enzymes": "Alanine aminotransferase increased",
+        "throwing up": "Vomiting", "numb hands and feet": "Peripheral sensory neuropathy",
+    },
 }
+
+# Severity/qualifier prefixes stripped when normalizing a term not found in the dictionary.
+_QUALIFIERS = ("bad ", "very ", "mild ", "moderate ", "severe ", "low ", "high ", "raised ")
+
+
+def code_term(verbatim: str, dictionary: dict[str, str]) -> str:
+    """Deterministic dictionary coder: verbatim reported term → standardized term.
+
+    Exact dictionary hit wins; an unknown term falls back to a normalized Title Case (with
+    common severity qualifiers stripped) so *any* reported term still codes to something
+    stable. Production replaces this with an official MedDRA/WHODrug mapping API.
+    """
+    if verbatim in dictionary:
+        return dictionary[verbatim]
+    cleaned = verbatim.strip().lower()
+    for q in _QUALIFIERS:
+        if cleaned.startswith(q):
+            cleaned = cleaned[len(q):]
+            break
+    return cleaned.capitalize()
 
 
 def _gen_ae(design: ProtocolDesign, subs: list[dict], rng: random.Random, profile: str) -> pd.DataFrame:
-    catalog = _AE_CATALOG[profile]
+    dictionary = _AE_DICTIONARY[profile]
+    verbatims = list(dictionary)
     rows = []
     for s in subs:
         seq = 0
         for _ in range(rng.randint(0, 3)):
             seq += 1
-            verbatim, decod = rng.choice(catalog)  # reported term → MedDRA-coded term
+            verbatim = rng.choice(verbatims)
+            decod = code_term(verbatim, dictionary)  # reported term → MedDRA-coded term
             # Onset on/after first dose — the loop's repair step depends on this invariant.
             onset = s["RFSTDTC"] + timedelta(days=rng.randint(1, 90))
             rows.append({
@@ -415,29 +468,31 @@ def _gen_ae(design: ProtocolDesign, subs: list[dict], rng: random.Random, profil
 # --------------------------------------------------------------------------- CM (con-meds)
 
 # Concomitant medications: CMTRT is the reported drug name; CMDECOD is the WHODrug-coded
-# standardized name. Same hackathon stand-in as AE — production routes each verbatim drug
-# through an official WHODrug mapping service.
-_CM_CATALOG = {
-    "cardiology": [
-        ("lisinopril 10mg", "Lisinopril"), ("metoprolol", "Metoprolol"),
-        ("lasix", "Furosemide"), ("spironolactone", "Spironolactone"),
-        ("aspirin 81mg", "Acetylsalicylic acid"),
-    ],
-    "oncology": [
-        ("ondansetron", "Ondansetron"), ("dexamethasone", "Dexamethasone"),
-        ("tylenol", "Paracetamol"), ("omeprazole", "Omeprazole"), ("filgrastim", "Filgrastim"),
-    ],
+# preferred name — coded by the same deterministic `code_term` stand-in as AE (production
+# routes each verbatim drug through an official WHODrug mapping API).
+_CM_DICTIONARY = {
+    "cardiology": {
+        "lisinopril 10mg": "Lisinopril", "metoprolol": "Metoprolol",
+        "lasix": "Furosemide", "spironolactone": "Spironolactone",
+        "aspirin 81mg": "Acetylsalicylic acid",
+    },
+    "oncology": {
+        "ondansetron": "Ondansetron", "dexamethasone": "Dexamethasone",
+        "tylenol": "Paracetamol", "omeprazole": "Omeprazole", "filgrastim": "Filgrastim",
+    },
 }
 
 
 def _gen_cm(design: ProtocolDesign, subs: list[dict], rng: random.Random, profile: str) -> pd.DataFrame:
-    catalog = _CM_CATALOG[profile]
+    dictionary = _CM_DICTIONARY[profile]
+    verbatims = list(dictionary)
     rows = []
     for s in subs:
         seq = 0
         for _ in range(rng.randint(0, 3)):
             seq += 1
-            verbatim, decod = rng.choice(catalog)  # reported drug → WHODrug-coded name
+            verbatim = rng.choice(verbatims)
+            decod = code_term(verbatim, dictionary)  # reported drug → WHODrug-coded name
             start = s["RFSTDTC"] + timedelta(days=rng.randint(-30, 30))
             rows.append({
                 "STUDYID": design.study_id, "USUBJID": s["USUBJID"], "CMSEQ": seq,
