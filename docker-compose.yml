@@ -1,0 +1,12 @@
+# Single-command spin-up:  docker compose up   (or: podman-compose up)
+# Requires a local .env with ANTHROPIC_API_KEY (copy from .env.example).
+services:
+  protocol-to-data:
+    build: .
+    image: protocol-to-data:latest
+    container_name: protocol-to-data
+    ports:
+      - "7860:7860"          # host:container — open http://localhost:7860
+    env_file:
+      - .env                 # passes ANTHROPIC_API_KEY (and optional model overrides)
+    restart: unless-stopped

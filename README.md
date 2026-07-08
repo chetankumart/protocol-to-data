@@ -74,6 +74,20 @@ CSVs and the anomaly scorecard. The UI reuses `run_loop` unchanged — it's pres
 ![protocol-to-data web UI — the narrated loop shows Claude extracting the design, hitting a
 validation failure (planned domain EG has no data), self-repairing, and passing](docs/img/ui_demo.png)
 
+## 🚀 Quickstart (Docker)
+
+Run the whole app — web UI included — with one command, no local Python setup:
+
+```bash
+cp .env.example .env      # then add your ANTHROPIC_API_KEY
+docker compose up         # or:  podman-compose up
+```
+
+Then open **http://localhost:7860**. The image installs dependencies, runs as a non-root
+user, and reads your API key from `.env` at runtime (it is never baked into the image). The
+compose file is engine-agnostic, so Podman users can substitute `podman-compose up`. Rebuild
+after code changes with `docker compose up --build`.
+
 ## Architecture (one loop)
 
 ```
@@ -91,9 +105,28 @@ Skill: [`.claude/skills/protocol-to-data/SKILL.md`](.claude/skills/protocol-to-d
 
 ## Status
 
-🚧 **Hackathon scaffold.** Schemas, CLI, skill, and the loop skeleton are in place;
-generation/validation modules have working stubs with clear `TODO(hackathon)` markers
-and an optional bridge to a production engine. See [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md).
+✅ **Complete and demo-ready.** Extraction, generation (therapeutic-area-aware,
+dictionary-coded, referentially-sound), self-repair, and anomaly detection all work
+end-to-end, with a full offline test suite and CI. See
+[`docs/SUBMISSION.md`](docs/SUBMISSION.md) and [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md).
+
+## 🤝 Contributing
+
+PRs welcome. Every push and pull request runs the **GitHub Actions CI**
+([`.github/workflows/ci.yml`](.github/workflows/ci.yml)), which must pass before review:
+
+1. **`ruff check .`** — code quality / lint
+2. **`pytest`** — the full offline test suite (schemas, generation, referential + temporal
+   integrity, dictionary coding, validation, the repair loop, and anomaly detection). No API
+   key required — all LLM calls are mocked.
+
+Please run both locally before opening a PR:
+
+```bash
+pip install ruff pytest
+ruff check .
+pytest -q
+```
 
 ## License
 

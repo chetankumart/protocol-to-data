@@ -235,6 +235,14 @@ def build_ui():
 
 
 if __name__ == "__main__":
+    import os
+
     import gradio as gr
-    build_ui().queue().launch(theme=gr.themes.Soft(), server_name="127.0.0.1",
-                              server_port=7860)
+
+    # Bind address is env-driven: local dev stays on 127.0.0.1 (safe); containers set
+    # GRADIO_SERVER_NAME=0.0.0.0 so the app is reachable through the mapped port.
+    build_ui().queue().launch(
+        theme=gr.themes.Soft(),
+        server_name=os.environ.get("GRADIO_SERVER_NAME", "127.0.0.1"),
+        server_port=int(os.environ.get("GRADIO_SERVER_PORT", "7860")),
+    )

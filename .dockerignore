@@ -1,0 +1,25 @@
+# Keep the build context (and image) lean and secret-free.
+.git/
+.github/
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# secrets & local state — never ship these in the image
+.env
+*.key
+.cache/
+runs/
+data/output/*
+!data/output/.gitkeep
+data/protocols/*
+!data/protocols/.gitkeep
+
+# docs images / misc
+docs/img/
+*.png

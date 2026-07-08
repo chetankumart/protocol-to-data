@@ -29,3 +29,6 @@ design.json
 .DS_Store
 .idea/
 .vscode/
+
+# Local-only social/submission draft (not for the public repo)
+docs/SOCIAL_POST.md
