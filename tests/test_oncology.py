@@ -33,7 +33,7 @@ def _amg510_design() -> ProtocolDesign:
                 Visit(name="Tumor Assessment Week 7", day=49),
                 Visit(name="Tumor Assessment Week 13", day=91)],
         population=Population(n_subjects=20, sex="all"),
-        domains=[DomainPlan(domain=d) for d in ("DM", "VS", "LB", "QS", "AE", "EX", "RS")],
+        domains=[DomainPlan(domain=d) for d in ("DM", "VS", "LB", "QS", "AE", "EX", "RS", "PC")],
     )
 
 
@@ -47,7 +47,7 @@ def test_profile_detected_as_oncology():
 
 def test_generates_all_domains_and_validates(tmp_path):
     out = _dataset(tmp_path)
-    for f in ("dm", "vs", "lb", "qs", "ae", "ex", "rs"):
+    for f in ("dm", "vs", "lb", "qs", "ae", "ex", "rs", "pc"):
         assert (out / f"{f}.csv").exists(), f"missing {f}.csv"
     report = validate_dataset(_amg510_design(), out)
     assert report.passed, [f.message for f in report.findings]
@@ -60,8 +60,23 @@ def test_lb_is_oncology_panel_not_cardiac(tmp_path):
     # hematology + chemistry + coagulation + thyroid all represented
     for expected in ("HGB", "NEUT", "PLT", "ALT", "AST", "INR", "APTT", "TSH", "FT4"):
         assert expected in tests, f"missing lab {expected}"
-    # PK concentrations present, arm-specific
-    assert "SOTORASIB" in tests and "DOCETAXEL" in tests
+    # PK now lives in the PC domain, not LB
+    assert not ({"SOTORASIB", "DOCETAXEL"} & tests)
+
+
+def test_pc_holds_pk_concentrations(tmp_path):
+    pc = pd.read_csv(_dataset(tmp_path) / "pc.csv")
+    assert {"USUBJID", "PCTESTCD", "PCORRES", "PCDTC"}.issubset(pc.columns)
+    assert set(pc["PCTESTCD"]) <= {"SOTORASIB", "DOCETAXEL"}
+    assert (pc["PCORRESU"] == "ng/mL").all()
+    assert (pc["PCORRES"] >= 0).all() and pc["PCORRES"].mean() > 500  # realistic PK magnitude
+
+
+def test_neutropenia_stays_above_grade4(tmp_path):
+    """Docetaxel ANC should stay ≥ 0.5 (grade 3 floor), not dip into grade 4."""
+    lb = pd.read_csv(_dataset(tmp_path) / "lb.csv")
+    anc = lb[lb["LBTESTCD"] == "NEUT"]["LBORRES"]
+    assert anc.min() >= 0.5
 
 
 def test_qs_is_oncology_instruments(tmp_path):
@@ -96,5 +111,5 @@ def test_rs_has_recist_responses(tmp_path):
 def test_oncology_deterministic(tmp_path):
     a = _dataset(tmp_path / "a")
     b = _dataset(tmp_path / "b")
-    for f in ("lb", "qs", "rs", "ex"):
+    for f in ("lb", "qs", "rs", "pc", "ex"):
         assert (a / f"{f}.csv").read_text() == (b / f"{f}.csv").read_text()
