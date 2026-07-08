@@ -59,6 +59,18 @@ python cli.py validate data/output/<study>/                # schema + clinical c
 python cli.py anomalies data/output/<study>/ --inject 5    # inject + detect loop
 ```
 
+## Web UI
+
+Prefer a browser? A thin Gradio front-end wraps the same loop:
+
+```bash
+python app.py           # then open http://127.0.0.1:7860
+```
+
+Upload a protocol (or use the bundled sample), set subjects/seed/anomalies, and watch the
+extract → generate → validate → **repair** loop stream live, then browse the generated SDTM
+CSVs and the anomaly scorecard. The UI reuses `run_loop` unchanged — it's presentation only.
+
 ## Architecture (one loop)
 
 ```

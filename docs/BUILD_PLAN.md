@@ -63,7 +63,8 @@ Time-boxed so a demo exists by Day 5, then polish. Each day ends with something 
 
 ## Stretch goals (do not block submission)
 - Engine-bridge backend for full 32-domain output
-- Web UI (Gradio/Streamlit) showing the narrated loop
+- [x] Web UI (Gradio) showing the narrated loop — `app.py` (`python app.py` → :7860);
+      upload protocol → live loop stream → SDTM CSV browser + anomaly scorecard
 - `define.xml` / metadata emission
 - Protocol-diff mode (v1 vs v2 → regenerate affected domains)
 

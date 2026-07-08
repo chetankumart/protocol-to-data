@@ -4,7 +4,7 @@
 **Track:** Build (Development) — built with Claude Code
 **Repo:** https://github.com/chetankumart/protocol-to-data
 **Demo video:** _(link)_
-**One-command demo:** `ptd run examples/sample_protocol.md --subjects 40 --seed 42 --anomalies 5`
+**Run it:** CLI — `ptd run examples/sample_protocol.md --subjects 40 --seed 42 --anomalies 5` · Web UI — `python app.py` (upload a protocol, watch the loop stream, browse the data)
 
 ---
 
@@ -28,7 +28,8 @@ generation and validation can be automated and self-correcting.
 
 ## What it does
 
-`protocol-to-data` is a Claude-driven agentic loop. Drop in a protocol (PDF/HTML/text) and:
+`protocol-to-data` is a Claude-driven agentic loop, usable from the CLI or a thin Gradio web
+UI (`app.py`). Drop in a protocol (PDF/HTML/text) and:
 
 1. **Ingest** — normalize the document to text.
 2. **Extract** *(Claude)* — read the prose and emit a typed `ProtocolDesign`: arms, visits
@@ -98,6 +99,7 @@ submission is the new agentic loop built during the hackathon**, not that platfo
 | Self-validation + Claude repair edge | — |
 | Anomaly inject/detect loop + scorecard (`anomalies.py`) | — |
 | Builtin standalone generator (`generate.py`) | — |
+| Thin Gradio web UI (`app.py`) | — |
 
 The production engine can be *bridged in* as an optional `--backend engine-bridge`, but the
 agentic orchestration — extraction, repair, detection — is what's new.

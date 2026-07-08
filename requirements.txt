@@ -4,3 +4,4 @@ pandas>=2.0
 pdfplumber>=0.11
 beautifulsoup4>=4.12
 pytest>=8.0
+gradio>=4.44   # web UI (app.py); core CLI works without it
