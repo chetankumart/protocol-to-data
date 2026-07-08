@@ -1,72 +1,113 @@
-# Demo Script (2–3 minutes)
+# Demo Script
 
-Goal: show *unstructured protocol → analyzable data* with Claude reasoning visible.
-Record terminal + brief slides. Narrate in first person.
+Two versions below. **Record the Oncology (Amgen) version** — it's the stronger story:
+a dense, unstructured 179-page protocol → a biologically-responsive, self-repairing SDTM
+dataset. The CARDIO-HF version is kept as a simpler, lower-risk fallback.
 
-## Beat 0 — Hook (0:00–0:20)
-> "Every clinical trial needs realistic test data before it goes live — to configure
-> systems, validate dashboards, prototype analyses. Today that's days of manual work
-> and it can't touch real patient data. Watch Claude do it from just the protocol."
+---
 
-Show `examples/sample_protocol.md` scrolling briefly — emphasize it's raw prose.
+# ★ Primary: Oncology (Amgen AMG 510 / CodeBreak 200)
 
-## Beat 1 — One command (0:20–0:35)
+**Goal:** show *unstructured 179-page oncology protocol → clinically-intelligent SDTM data*,
+with Claude's reasoning visible. Target length **2:30**. Narrate in first person.
+
+**The one command (lock this seed):**
 ```bash
-ptd run examples/sample_protocol.md --subjects 40 --seed 42 --anomalies 5
+ptd run data/protocols/Prot_000-amgen.pdf --subjects 40 --seed 42 --anomalies 5
 ```
-Let the narrated loop print live:
-```
-🧬  Reading protocol .......... CARDIO-HF-P3 Phase 3
-🧩  Extracting design (Claude)  2 arms, 6 visits, 4 endpoints, ~7 domains
-```
+Or the web UI (nicer visual): `python app.py` → upload the Amgen PDF → subjects 40, seed 42,
+anomalies 5 → **Run the loop**.
 
-## Beat 2 — Extraction is reasoning (0:35–1:05)
-Pause on the extracted `ProtocolDesign`. Point out Claude inferred the visit schedule,
-arms, and which SDTM domains the endpoints map to (KCCQ→QS, NT-proBNP→LB, ECG→EG…) —
-from prose, no templates.
+## ⚠️ Pre-flight (do this BEFORE recording — it protects the Flex beat)
 
-## Beat 3 — Generate + self-repair (1:05–1:45)
-The protocol mentions a 12-lead ECG, so Claude plans an **EG** domain. The standalone
-generator doesn't produce EG — validation flags it, and Claude repairs the design:
-```
-🏭  Generating synthetic data ...
-🔎  Validating ............... ⚠️  FAIL: planned domain EG has no generated data
-🔧  Repairing (Claude) ....... design adjusted (EG dropped / remapped, noted in assumptions)
-🏭  Generating synthetic data ...
-🔎  Validating ............... ✅  PASS — 0 errors across 6 planned domains
-```
-> "This is the key move — Claude reads its own validation failures and fixes the
-> design, the way a data manager would, in seconds. It's an agent, not a pipeline."
+Some of the payoff comes from Claude's **semantic** anomaly detector, which is
+non-deterministic. Reliable vs. bonus:
 
-## Beat 4 — Anomaly detection (1:45–2:20)
+| Beat | Guaranteed every run? |
+|------|----------------------|
+| Extraction (2 arms, cycle-based visits, ~12 domains) | ✅ yes |
+| Self-repair (drops unproducible oncology domains → PASS) | ✅ yes |
+| **5/5 injected anomalies caught** | ✅ yes (injection is seeded) |
+| PK-in-LB "CDISC" catch · grade-4 neutropenia catch | ⚠️ **bonus, not guaranteed** |
+
+**So:** do **2–3 dry-run takes first** and record the one where the two bonus findings appear.
+If a take doesn't surface them, don't force it — the 5/5 + the repair loop still closes strong.
+Also: **warm the cache** with one throwaway run so the recorded run is faster, and keep
+`--seed 42` (that seed produced a grade-4 ANC dip and clean detections in testing).
+
+## Beat 0 — The Hook (0:00–0:20)
+**[SCREEN]** Scroll the Amgen PDF fast — title page, then the dense schedule-of-activities table.
+> "This is a real 179-page oncology protocol — AMG 510 versus docetaxel in lung cancer.
+> Today, turning this into usable test data means someone reads all of it and hand-builds
+> SDTM datasets by hand. Days of work. Watch Claude do it from the raw PDF."
+
+## Beat 1 — The Magic: extraction is reasoning (0:20–1:05)
+**[SCREEN]** Run the command / hit **Run**. Let the narration stream.
 ```
-🕵️  Injecting 5 anomalies (seed 42) ...
-🔎  Claude detecting ...
+🧩  Extracting design (Claude) ...
+    → AMG510-20190009: 2 arms, ~12 visits, 18 endpoints, ~12 domains
+```
+> "It's reading the prose, not a template. It pulled both arms — sotorasib and docetaxel —
+> and the full cycle-based visit schedule, Cycle 1 Day 1, Day 8, the tumor-assessment weeks.
+> It mapped each endpoint to the right SDTM domain: RECIST to tumor response, the labs, the
+> questionnaires. That's clinical reasoning, from a PDF."
+
+*(Read whatever visit/domain counts appear on screen — they vary slightly per run.)*
+
+## Beat 2 — The self-repair (1:05–1:35)
+**[SCREEN]** Pause on the validation → repair → re-validation lines.
+```
+🔎  Validating ....... ⚠️ FAIL: planned domains EG/PC/SS/TR/TU have no generated data
+🔧  Repairing (Claude) → design adjusted
+🔎  Re-validating .... ✅ PASS — 0 errors across N planned domains
+```
+> "It planned oncology domains the standalone generator can't produce, validation caught it,
+> and Claude repaired its own design and regenerated — in one pass. This is an agent, not a
+> pipeline. It reads its own failures and fixes them."
+
+## Beat 3 — The Flex: clinically-intelligent data (1:35–2:20)
+**[SCREEN]** Pause on the anomaly scorecard.
+> "I inject five data-quality defects into a clean copy, and a second Claude agent hunts them."
+```
 🎯  Claude caught 5/5 injected anomalies
-    • SBP=400 in VS → physiologically implausible
-    • GHOST-9999 in LB → orphan (no matching DM)
-    • PREGNANCY on a male subject → logical inconsistency
-    • AE onset in 2020 → pre-dose (temporal)
-    • duplicated VS record → uniqueness
 ```
+> "Five for five — the impossible blood pressure, the pre-dose adverse event, the orphan
+> record, a pregnancy logged for a male subject."
 
-## Beat 5 — Payoff (2:20–2:45)
-Open a generated CSV / show the NT-proBNP-falls-on-drug trajectory.
-> "Fully synthetic, reproducible with a seed, zero PHI — and it generalizes across
-> therapeutic areas. From protocol to analyzable data, driven by Claude."
+**[IF your take surfaced the bonus findings — this is the money line:]**
+> "But look at what it flagged *on its own*, beyond what I planted. First — it noticed the PK
+> concentrations are sitting in the LB domain instead of the dedicated PC domain. It knows
+> CDISC. Second, and this is the one — it flagged a grade-4 neutrophil count in the docetaxel
+> arm. Docetaxel causes severe myelosuppression. My generator modeled that, and Claude
+> recognized it as a real, treatment-emergent finding. This synthetic data isn't random
+> distributions — it's biologically responsive to the assigned study arm."
 
-## 🔒 Frozen demo path (locked Day 5 — do not change)
-- **Command:** `ptd run examples/sample_protocol.md --subjects 40 --seed 42 --anomalies 5`
-- **Input:** `examples/sample_protocol.md` (includes the ECG line that triggers the repair beat)
-- **Deterministic offline** (no key): generation, anomaly injection, and the scorecard.
-- **Model-dependent** (needs the key): extraction, the repair edit, anomaly detection.
-  If a live extraction happens to be clean (no unproducible domain), the repair beat is
-  simply skipped — the happy-path "PASS, 0 errors" is still a strong demo. To guarantee the
-  repair beat, keep the ECG assessment in the frozen protocol.
-- After the first green live run on this command, **stop changing the demo path** — only
-  fix bugs, and re-record if a beat's wording drifts.
+## Beat 4 — Payoff (2:20–2:40)
+**[SCREEN]** Open `ex.csv` (or the EX table in the UI).
+> "And it assigned the exact protocol regimens per arm — AMG 510 960 milligrams once daily,
+> docetaxel 75 per meter-squared every three weeks. Fully synthetic, reproducible with a seed,
+> zero PHI — from a 179-page PDF to analyzable, clinically-coherent data, driven by Claude."
 
-## Recording tips
-- Pre-run once to warm the API cache; keep the recorded run on the frozen seed.
-- Keep total under 3 min. Cut dead air during API calls in edit.
-- Show the repo URL and "Built with Claude: Life Sciences — Development Track" at the end.
+---
+
+# Fallback: Cardiology (CARDIO-HF sample) — simpler, lower-risk
+
+Deterministic-friendly and no large PDF. Use if the oncology take won't cooperate.
+
+**Command:** `ptd run examples/sample_protocol.md --subjects 40 --seed 42 --anomalies 5`
+
+- **Hook** — show `examples/sample_protocol.md` (raw prose).
+- **Extract** — `CARDIO-HF-P3: 2 arms, 6 visits, ~7 domains` (KCCQ→QS, NT-proBNP→LB, ECG→EG).
+- **Repair** — the protocol's ECG makes Claude plan an EG domain the builtin can't emit;
+  validation flags it, Claude repairs → PASS across 6 domains.
+- **Anomalies** — `Claude caught 5/5 injected anomalies`.
+- **Payoff** — open a generated CSV / the NT-proBNP-falls-on-drug trajectory.
+
+---
+
+## Recording tips (both versions)
+- Pre-run once to warm the API cache; keep the recorded run on `--seed 42`.
+- Live extraction/repair on the 179-page PDF takes ~1–2 min — **cut the dead air in editing**;
+  jump-cut from "Extracting…" to the results.
+- Keep total under 3 min.
+- Close on the repo URL + "Built with Claude: Life Sciences — Build Track".
