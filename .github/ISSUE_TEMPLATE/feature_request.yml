@@ -1,0 +1,52 @@
+name: Feature request / change proposal
+description: Propose a feature or non-trivial change BEFORE opening a PR
+title: "feat: <short description>"
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Discuss before you build.** Per [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md),
+        non-trivial changes need agreement here first — large unsolicited PRs are closed
+        unreviewed. This issue *is* that discussion.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What's missing or painful, and who is it for (data manager, statistician, engineer)?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: What you want to build and roughly how. Keep it atomic — one logical change.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope & files touched
+      description: >
+        Which modules/docs would change? Does it respect the hybrid-AI boundary
+        (Claude reasons, Python generates — `generate.py` stays LLM-free)?
+    validations:
+      required: true
+  - type: dropdown
+    id: willing
+    attributes:
+      label: Are you willing to implement this?
+      options:
+        - "Yes — I'll open a PR once the approach is agreed here"
+        - "No — proposing for someone else to pick up"
+    validations:
+      required: true
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Pre-flight
+      options:
+        - label: I searched existing issues and this isn't a duplicate.
+          required: true
+        - label: I've read CONTRIBUTING.md and understand large PRs without a prior agreed issue are closed unreviewed.
+          required: true

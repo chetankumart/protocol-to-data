@@ -1,0 +1,61 @@
+name: Bug report
+description: Report a reproducible bug in protocol-to-data
+title: "bug: <short description>"
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. **Search existing issues first.** For anything that isn't a bug —
+        a feature or a non-trivial change — use the *Feature request* template and discuss
+        before coding (see [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md)).
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: >
+        Exact commands. Include the protocol source (a synthetic/redacted snippet — never real
+        PHI), the seed, and subject count.
+      placeholder: |
+        1. ptd run examples/sample_protocol.md --seed 42 --anomalies 5
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs. actual
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      description: Output of `git rev-parse --short HEAD`.
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: OS, Python version, install method (pip / Docker / Render), backend (builtin / engine-bridge).
+    validations:
+      required: true
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Pre-flight
+      options:
+        - label: I searched existing issues and this isn't a duplicate.
+          required: true
+        - label: This report contains no real patient data (PHI) — any snippets are synthetic/redacted.
+          required: true
+        - label: I reproduced it on a clean checkout (ran `ruff check .` and `pytest -q` to rule out my environment).
+          required: false

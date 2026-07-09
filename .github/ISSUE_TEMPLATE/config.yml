@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 Contribution guidelines (read first)
+    url: https://github.com/chetankumart/protocol-to-data/blob/main/CONTRIBUTING.md
+    about: Strict fork-and-PR policy. Read before opening an issue or PR — unsolicited large AI-generated PRs are closed unreviewed.
