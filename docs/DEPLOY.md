@@ -1,38 +1,41 @@
 # Deploy — public demo, MCP server, PHI sanitization
 
-Three ways to run beyond a local `python app.py`. The app is already deploy-ready
-(`app.py` auto-binds `0.0.0.0` on Hugging Face Spaces / containers via `SPACE_ID` / env).
+Ways to run beyond a local `python app.py`. The app is already deploy-ready: `app.py`
+auto-binds `0.0.0.0` on Hugging Face Spaces / containers (via `SPACE_ID` / `GRADIO_SERVER_NAME`)
+and honors a platform-assigned `$PORT` (Render / Railway / Fly / Cloud Run).
 
 ---
 
-## 1. Public demo on Hugging Face Spaces (judge-accessible URL)
+## 1. Public demo — judge-accessible URL
 
-Gives you a public URL (e.g. `https://huggingface.co/spaces/<you>/protocol-to-data`) to put
-at the top of `docs/SUBMISSION.md` — no clone, no local key required for a judge.
+Gives you a public URL to put at the top of `docs/SUBMISSION.md` — no clone, no local key
+required for a judge. Two paths; pick one.
 
-1. **Create the Space** → huggingface.co/new-space → SDK **Gradio**, hardware **CPU basic** (free).
-2. **Add the code.** Easiest: in the Space's *Files* tab, upload the repo (or `git push` this
-   repo to the Space remote). Ensure `app.py`, `requirements.txt`, and `src/` are present.
-3. **Point the Space at `app.py`.** In the Space's own `README.md`, put this header (this is
-   the Space config — separate from the project README):
-   ```yaml
-   ---
-   title: protocol-to-data
-   emoji: 🧬
-   colorFrom: indigo
-   colorTo: purple
-   sdk: gradio
-   app_file: app.py
-   pinned: false
-   ---
-   ```
-4. **Add your key as a secret** → Space *Settings → Variables and secrets → New secret*:
-   `ANTHROPIC_API_KEY = sk-ant-…`. (Never commit it.) The app reads it at runtime.
-5. The Space builds and serves. `app.py` sees `SPACE_ID` and binds `0.0.0.0:7860` automatically.
-6. Paste the public URL into `docs/SUBMISSION.md` (top) and `docs/SOCIAL_POST.md`.
+### 1a. Render (free) — recommended
 
-> Cost note: the semantic cache lives in the Space's ephemeral disk; a fresh Space rebuild
-> clears it. The $200 API credits cover judge traffic comfortably (a full run ≈ $0.2–0.3).
+Hugging Face now requires a **PRO** subscription to host Gradio/Docker Spaces on the free
+CPU tier (`402 Payment Required` on Space create). Render's free tier hosts the **same
+Docker image** for $0 (it spins down when idle — expect a ~30 s cold start on the first hit,
+which is fine for a demo). The repo ships a [`render.yaml`](../render.yaml) blueprint:
+
+1. **render.com → New → Blueprint** → connect this GitHub repo. Render reads `render.yaml`
+   and provisions a free Docker web service from the existing `Dockerfile`.
+2. **Set the secret** → in the service's *Environment*, add `ANTHROPIC_API_KEY = sk-ant-…`
+   (the blueprint marks it `sync: false`, so Render prompts for it; never committed).
+3. Render builds the image and serves at `https://protocol-to-data-*.onrender.com`. The app
+   binds `0.0.0.0` and listens on Render's `$PORT` automatically.
+4. Paste the public URL into `docs/SUBMISSION.md` (top) and `docs/SOCIAL_POST.md`.
+
+### 1b. Hugging Face Space (needs HF PRO)
+
+If you have (or take) **HF PRO**, deployment is fully scripted — the repo's deploy helper
+creates the Gradio Space, uploads `app.py`/`cli.py`/`src/`/`requirements.txt`/sample, and
+sets `ANTHROPIC_API_KEY` as a Space secret via the API. The Space's own `README.md` carries
+the Gradio SDK header (`sdk: gradio`, `app_file: app.py`); `app.py` sees `SPACE_ID` and binds
+`0.0.0.0:7860` automatically. Requires a **write-scoped** HF token in `.env` as `HF_TOKEN`.
+
+> Cost note: the semantic cache lives on the host's ephemeral disk; a fresh rebuild clears it.
+> The $200 API credits cover judge traffic comfortably (a full run ≈ $0.2–0.3).
 
 ---
 

@@ -242,8 +242,11 @@ if __name__ == "__main__":
     # Bind address is env-driven: local dev stays on 127.0.0.1 (safe); containers and hosted
     # platforms need 0.0.0.0. Hugging Face Spaces sets SPACE_ID, so we auto-bind there.
     default_host = "0.0.0.0" if os.environ.get("SPACE_ID") else "127.0.0.1"
+    # Port precedence: platform-assigned PORT (Render/Railway/Fly/Cloud Run) → explicit
+    # GRADIO_SERVER_PORT → 7860.
+    port = os.environ.get("PORT") or os.environ.get("GRADIO_SERVER_PORT") or "7860"
     build_ui().queue().launch(
         theme=gr.themes.Soft(),
         server_name=os.environ.get("GRADIO_SERVER_NAME", default_host),
-        server_port=int(os.environ.get("GRADIO_SERVER_PORT", "7860")),
+        server_port=int(port),
     )

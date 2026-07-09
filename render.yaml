@@ -1,0 +1,17 @@
+# Render blueprint — free public demo using the existing Dockerfile.
+# HF Spaces now gates Gradio/Docker Spaces behind PRO; Render's free tier hosts the same
+# container for $0 (spins down when idle, ~30s cold start on first hit — fine for a demo).
+#
+# Deploy: render.com → New → Blueprint → connect this GitHub repo → it reads this file.
+# Then set the ANTHROPIC_API_KEY secret in the dashboard (prompted, never committed).
+# The app binds 0.0.0.0 (Dockerfile sets GRADIO_SERVER_NAME) and honors Render's $PORT.
+services:
+  - type: web
+    name: protocol-to-data
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false   # set as a secret in the Render dashboard — never in the repo
