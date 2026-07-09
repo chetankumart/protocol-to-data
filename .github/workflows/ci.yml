@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+# Least privilege — jobs only need to read the repo.
+permissions:
+  contents: read
+
 jobs:
   quality:
     name: Lint & Test
@@ -30,3 +34,32 @@ jobs:
       - name: Tests (pytest)
         # The full suite is offline — no ANTHROPIC_API_KEY needed (LLM calls are mocked).
         run: pytest -q
+
+  deploy:
+    name: Deploy to Render
+    needs: quality                # only runs if Lint & Test passed
+    # Deploy only for real merges into main — never on PRs or other branches.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # Serialize deploys so rapid pushes don't race; a newer push supersedes an in-flight one.
+    concurrency:
+      group: render-deploy
+      cancel-in-progress: true
+    steps:
+      - name: Trigger Render deploy hook
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$RENDER_DEPLOY_HOOK" ]; then
+            echo "::error::RENDER_DEPLOY_HOOK secret is not set. Add it under" \
+                 "Settings → Secrets and variables → Actions → New repository secret."
+            exit 1
+          fi
+          echo "green build on main → triggering Render deploy…"
+          # Render deploy hook: a POST (or GET) to the secret URL kicks off a rebuild.
+          http_code=$(curl -sS -o /dev/null -w "%{http_code}" -X POST "$RENDER_DEPLOY_HOOK")
+          echo "Render responded HTTP $http_code"
+          case "$http_code" in
+            2*) echo "✅ Render deploy triggered." ;;
+            *)  echo "::error::Render deploy hook returned HTTP $http_code"; exit 1 ;;
+          esac

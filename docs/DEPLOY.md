@@ -26,6 +26,26 @@ which is fine for a demo). The repo ships a [`render.yaml`](../render.yaml) blue
    binds `0.0.0.0` and listens on Render's `$PORT` automatically.
 4. Paste the public URL into `docs/SUBMISSION.md` (top) and `docs/SOCIAL_POST.md`.
 
+### 1c. CI-gated auto-deploy (GitHub Actions → Render) — recommended once live
+
+By default Render redeploys on every push to `main` — **including red builds**. To deploy only
+**green** commits, gate it behind CI: the `deploy` job in
+[`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs **only after `Lint & Test` passes**
+and **only on a push to `main`** (never on PRs), then POSTs a Render **deploy hook**.
+
+One-time setup:
+
+1. **Turn off Render's native auto-deploy** → Render service → *Settings → Build & Deploy →
+   Auto-Deploy → **No*** (so CI is the only trigger; avoids double deploys).
+2. **Create a deploy hook** → same *Settings* page → *Deploy Hook* → copy the secret URL
+   (`https://api.render.com/deploy/srv-…?key=…`).
+3. **Add it to GitHub** → repo *Settings → Secrets and variables → Actions → New repository
+   secret* → name **`RENDER_DEPLOY_HOOK`**, value = the hook URL.
+
+After that, every merge to `main` that passes lint + tests automatically ships to the live URL;
+a failing build never reaches production. The job hard-fails with a clear message if the secret
+is missing.
+
 ### 1b. Hugging Face Space (needs HF PRO)
 
 If you have (or take) **HF PRO**, deployment is fully scripted — the repo's deploy helper
