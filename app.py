@@ -166,6 +166,15 @@ def _resolve_port(env: dict | None = None) -> int:
     return int(env.get("PORT") or env.get("GRADIO_SERVER_PORT") or "7860")
 
 
+def _build_marker(env: dict | None = None) -> str:
+    """Short commit SHA of the running build, so any deploy is verifiable by loading the page.
+    Render auto-sets RENDER_GIT_COMMIT; other hosts set SOURCE_COMMIT / GIT_COMMIT. Falls back
+    to 'local' for a dev run."""
+    env = os.environ if env is None else env
+    sha = env.get("RENDER_GIT_COMMIT") or env.get("SOURCE_COMMIT") or env.get("GIT_COMMIT")
+    return sha[:7] if sha else "local"
+
+
 def build_ui():
     import gradio as gr
 
@@ -204,6 +213,10 @@ def build_ui():
             data_df = gr.Dataframe(label="Preview (first 200 rows)", interactive=False, wrap=True)
         with gr.Accordion("🎯 Anomaly scorecard", open=True):
             scorecard = gr.Markdown()
+
+        # Build marker — shows the deployed commit SHA so any deploy is verifiable by loading
+        # the page (Render sets RENDER_GIT_COMMIT; 'local' off-platform).
+        gr.Markdown(f"<sub>🧬 protocol-to-data · build `{_build_marker()}`</sub>")
 
         def on_run(file, use_samp, subj, sd, anom, export_fmt):
             rbac.require_write()  # RBAC injection point: running/generating is a write op (CDM)
