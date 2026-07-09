@@ -3,42 +3,61 @@
 > **From a clinical trial protocol to an analyzable synthetic dataset — in one agentic loop, driven by Claude.**
 
 A researcher, clinical data manager, or biotech engineer drops in a study protocol
-(PDF / HTML / text). Claude reads it, extracts the trial design, generates a
-statistically realistic **SDTM/CDASH-shaped synthetic dataset**, validates it,
-and (optionally) injects controlled data-quality anomalies so a downstream agent
-can find and explain them.
+(PDF / HTML / text). Claude reads it, extracts the trial design, and a deterministic engine
+generates a **therapeutic-area-aware, dictionary-coded, referentially-sound SDTM dataset** —
+validated, self-repaired on failure, and (optionally) stress-tested by a second agent that
+injects and detects data-quality defects.
 
-No real patient data. No manual schema wiring. Just: **protocol in → analyzable data out.**
+No real patient data. No manual schema wiring. Just: **protocol in → analyzable data out** —
+as **Databricks-ready Parquet, before an EDC is ever stood up.**
 
 Built for **[Built with Claude: Life Sciences](https://cerebralvalley.ai/e/built-with-claude-life-sciences)**
-(Cerebral Valley × Anthropic × Gladstone Institutes, July 7–13, 2026) — **Development Track**.
+(Cerebral Valley × Anthropic × Gladstone Institutes, July 7–13, 2026) — **Build Track**.
 
 ---
 
 ## The magic moment
 
 ```
-$ ptd run examples/sample_protocol.md --subjects 40 --seed 42
+$ ptd run examples/sample_protocol.md --subjects 40 --seed 42 --anomalies 5
 
-🧬  Reading protocol ................ CARDIO-HF Phase 3, 2 arms, 8 visits
-🧩  Extracting design ............... 3 endpoints, population n≈40, 12 SDTM domains
-🏭  Generating synthetic data ...... DM VS AE LB QS EX  (2,140 records)
-🔎  Validating ..................... 0 schema errors, 0 pre-dose AEs
-✅  Dataset ready → data/output/CARDIO-HF/synthetic_data/
+🧬  Reading protocol ...
+🧩  Extracting design (Claude) ...       → CARDIO-HF-P3: 2 arms, 6 visits, 6 endpoints, 7 domains
+🏭  Generating synthetic data ...
+    🔗  Integrity verified — no orphan USUBJID / VISITNUM before write
+🔎  Validating ...                       ⚠️  FAIL — planned domain EG has no generated data
+🔧  Repairing (Claude, attempt 1/2) ...  → design adjusted
+🔎  Validating ...                       ✅  PASS — 0 errors across 6 planned domains
+🎯  Claude caught 5/5 injected anomalies
+🪙  Run cost: $0.29 · 23,870 in / 6,458 out
 ```
 
-Each step is narrated by Claude with its reasoning visible — that is the demo.
+Every step is narrated by Claude with its reasoning visible — the **self-repair** loop (Claude
+reads its own validation failure and fixes the design) is what makes it an agent, not a pipeline.
 
 ---
 
-## Why this fits the hackathon
+## What's under the hood
 
-- **Development Track**: a practical tool for researchers/clinics/biotech, built with Claude Code.
-- **Agentic**: Claude is the orchestrator, not a bolt-on — it extracts, decides domains, generates, self-validates, and repairs.
-- **Life-sciences native**: SDTM/CDASH clinical domains, realistic clinical logic.
-- **Safe & shareable**: 100% synthetic, no PHI, reproducible with `--seed`.
+Hybrid AI by design — **Claude reasons, deterministic Python generates**:
 
-See [`docs/IDEA.md`](docs/IDEA.md) for the full pitch and [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md) for the 7-day plan.
+- 🧠 **Claude for reasoning only** — extraction, self-repair, and anomaly detection. It never
+  writes a data row, so it can't hallucinate structural data. (`generate.py` has zero LLM coupling.)
+- 🏭 **Therapeutic-area-aware generation** — a cardiology profile (NT-proBNP/KCCQ/NYHA) and an
+  oncology/NSCLC profile (hematology/chem/coag/thyroid + PK, QLQ-C30/LC13 + EQ-5D-5L, arm-exact
+  dosing, RECIST) selected deterministically from the protocol's indication.
+- 🔤 **Dictionary-coded SDTM** — `AEDECOD` (MedDRA) and `CMDECOD` (WHODrug) via a deterministic
+  `code_term` mapper ("bad headache" → "Headache", "lasix" → "Furosemide").
+- 🔗 **Referential + temporal integrity** — orphan `USUBJID` dropped and asserted; `VISIT↔VISITNUM`
+  asserted 1:1 across VS/LB/QS/RS — a verify-before-write gate.
+- 🕵️ **Anomaly loop** — a second Claude agent finds and explains injected defects, scored N/N.
+- ⚡ **Semantic caching** — SHA-256-keyed extraction cache; an identical protocol never pays for
+  extraction twice ($0 on a cache hit).
+- 🪙 **Cost observability** — live per-run token + `$` tracking in the UI and CLI.
+- 🗂️ **Run history · RBAC-aware · EDC-target-aware · Dockerized · CI-guarded** — enterprise seams
+  without over-building. See [`docs/SUBMISSION.md`](docs/SUBMISSION.md) for the full story.
+
+Safe & shareable: 100% synthetic, no PHI, reproducible with `--seed`.
 
 ---
 

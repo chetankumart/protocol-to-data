@@ -23,14 +23,18 @@ flowchart TD
 
 | Module | Responsibility | Claude? |
 |--------|----------------|---------|
-| `src/protocol_to_data/ingest.py` | Load pdf/html/md/txt → normalized text | no |
-| `src/protocol_to_data/extract.py` | Text → `ProtocolDesign` | **yes** |
+| `src/protocol_to_data/ingest.py` | Load pdf/html/md/txt → normalized text (+ PHI-sanitizer injection point) | no |
+| `src/protocol_to_data/extract.py` | Text → `ProtocolDesign`, with SHA-256 semantic cache + defensive JSON parsing | **yes** |
 | `src/protocol_to_data/schemas.py` | Typed models (`ProtocolDesign`, `Arm`, `Visit`, `Endpoint`, `DomainPlan`) | no |
-| `src/protocol_to_data/generate.py` | `ProtocolDesign` → per-domain CSVs | optional |
+| `src/protocol_to_data/generate.py` | `ProtocolDesign` → per-domain CSVs; therapeutic-area profiles, dictionary coding, referential/temporal integrity guard | no (0 LLM coupling) |
 | `src/protocol_to_data/validate.py` | Schema + clinical-rule checks → `ValidationReport` | no (Claude reads report on repair) |
-| `src/protocol_to_data/anomalies.py` | Inject controlled errors; Claude detects | **yes (detect)** |
+| `src/protocol_to_data/anomalies.py` | Inject controlled errors; Claude detects + scores | **yes (detect)** |
 | `src/protocol_to_data/loop.py` | Orchestrates 1–7, handles repair retries | **yes (repair)** |
+| `src/protocol_to_data/llm.py` | Claude API wrapper — model routing, structured output, token/cost tracking | **yes** |
+| `src/protocol_to_data/history.py` | Snapshot each run → `runs/<timestamp>/` for restore | no |
+| `src/protocol_to_data/rbac.py` | RBAC injection-point stubs (Clinical Data Manager write / Statistician read) | no |
 | `cli.py` | `ptd run/extract/generate/validate/anomalies` | no |
+| `app.py` | Gradio web UI — upload → live narrated loop → data browser + scorecard + cost badge | no |
 
 ## Data contracts
 
