@@ -103,6 +103,27 @@ validation failure (planned domain EG has no data) and self-repairing to PASS, w
 🪙 run-cost badge, the Databricks-ready export format, and the generated AE table showing
 MedDRA dictionary coding (AETERM "bad headache" → AEDECOD "Headache")](docs/img/ui_demo.png)
 
+## Use via API
+
+The same loop is callable programmatically through **one clean endpoint** —
+`generate_synthetic_data` (the UI-update functions are hidden from the API surface, and
+`gr.api` also exposes this as an MCP tool):
+
+```python
+from gradio_client import Client
+
+client = Client("https://protocol-to-data.onrender.com")
+result = client.predict(
+    file_path="", use_sample=True, subjects=40, seed=42, anomalies=0,
+    export_format="SDTM (Parquet) - Databricks Analytics Ready",
+    nct_id="NCT04303780", api_name="/generate_synthetic_data",
+)
+print(result["study_id"], result["files"])   # extracted design + generated SDTM file paths
+```
+
+It returns the extracted `ProtocolDesign` and the paths to the generated SDTM files as plain
+JSON — no Gradio UI objects.
+
 ## 🚀 Quickstart (Docker)
 
 Run the whole app — web UI included — with one command, no local Python setup:

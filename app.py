@@ -10,6 +10,7 @@ browse the generated SDTM CSVs and the anomaly scorecard. Reuses the agent uncha
 
 from __future__ import annotations
 
+import json
 import os
 import queue
 import sys
@@ -224,6 +225,41 @@ def _build_marker(env: dict | None = None) -> str:
     return sha[:7] if sha else "local"
 
 
+def api_run(file_path: str, use_sample: bool = True, subjects: int = 40, seed: int = 42,
+            anomalies: int = 0, export_format: str = EXPORT_SDTM, nct_id: str = "") -> dict:
+    """Clean programmatic entry point (Gradio/MCP endpoint ``generate_synthetic_data``).
+
+    Runs the protocol-to-data pipeline and returns ONLY the final artifacts as a JSON-serializable
+    dict — the extracted ProtocolDesign and the paths to the generated SDTM files. No Gradio UI
+    objects (Markdown / Dataframe / component updates) are returned.
+
+    Set ``use_sample=True`` to run the bundled CARDIO-HF sample; otherwise ``file_path`` must be a
+    server-readable protocol (PDF / HTML / txt). ``nct_id`` optionally attaches a read-only
+    ClinicalTrials.gov cross-check (it never influences generation).
+    """
+    path = str(SAMPLE) if (use_sample or not file_path) else file_path
+    final_extras = None
+    for _narration, is_final, extras in execute(path, subjects, seed, anomalies):
+        if is_final:
+            final_extras = extras
+    if not final_extras or not final_extras.get("output_dir"):
+        return {"status": "error", "message": "Generation did not complete; check server logs."}
+
+    out_dir = Path(final_extras["output_dir"])
+    design = json.loads(final_extras["design_json"])
+    resp = {
+        "status": "ok",
+        "study_id": design.get("study_id"),
+        "output_dir": str(out_dir),
+        "domains": final_extras.get("domains", []),
+        "files": [str(p) for p in sorted(out_dir.glob("*.csv"))],
+        "design": design,
+    }
+    if nct_id and nct_id.strip():
+        resp["registry_crosscheck"] = ctg_validator.fetch_ctg_baseline(nct_id)  # read-only
+    return resp
+
+
 def build_ui():
     import gradio as gr
 
@@ -308,12 +344,18 @@ def build_ui():
                 data_df: _load_domain_csv(data["output_dir"], domains[0] if domains else ""),
             }
 
+        # UI event listeners are presentation-only — hide them from the public API docs
+        # (api_name=False) so consumers see just the clean endpoint below, not UI-update signatures.
         run_btn.click(on_run, [file_in, use_sample, subjects, seed, anomalies, export_format, nct_input],
                       [narration, design_code, crosscheck_md, domain_dd, out_dir_state, scorecard,
-                       data_df, history_dd, usage_badge])
+                       data_df, history_dd, usage_badge], api_name=False)
         history_dd.change(on_load_run, [history_dd],
-                          [narration, design_code, domain_dd, out_dir_state, scorecard, data_df])
-        domain_dd.change(_load_domain_csv, [out_dir_state, domain_dd], data_df)
+                          [narration, design_code, domain_dd, out_dir_state, scorecard, data_df],
+                          api_name=False)
+        domain_dd.change(_load_domain_csv, [out_dir_state, domain_dd], data_df, api_name=False)
+
+        # The ONLY documented API/MCP endpoint: a clean, typed function returning final artifacts.
+        gr.api(api_run, api_name="generate_synthetic_data")
 
     return demo
 
