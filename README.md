@@ -117,6 +117,56 @@ user, and reads your API key from `.env` at runtime (it is never baked into the 
 compose file is engine-agnostic, so Podman users can substitute `podman-compose up`. Rebuild
 after code changes with `docker compose up --build`.
 
+## System & deployment architecture
+
+How the whole thing is wired — from a `git push` to the live public URL, and how a request
+flows through the app at runtime:
+
+```mermaid
+flowchart TB
+    dev["👩‍💻 Developer<br/>(Claude Code)"] -->|"git push · fork & PR"| repo
+
+    subgraph GH["GitHub — source & CI/CD"]
+        direction TB
+        repo["📦 repo · main<br/>branch-protected · CODEOWNERS"]
+        repo --> ci["⚙️ Actions CI<br/>Lint + Test (ruff · pytest)"]
+        ci -->|"green + push to main"| deployjob["🚀 Deploy job<br/>POST deploy hook"]
+    end
+
+    deployjob -->|"RENDER_DEPLOY_HOOK (secret)"| RENDER
+
+    subgraph RENDER["Render — cloud host (free tier)"]
+        direction TB
+        build["🐳 Build Docker image<br/>from Dockerfile · non-root"]
+        build --> live["🖥️ Gradio app · app.py<br/>binds 0.0.0.0 : $PORT"]
+        key["🔑 ANTHROPIC_API_KEY<br/>(Render secret)"] -.-> live
+    end
+
+    live --> url(["🌐 protocol-to-data.onrender.com"])
+    judge["🧑‍🔬 User / Judge"] --> url
+
+    url --> loop
+    cli["⌨️ CLI · ptd"] --> loop
+    mcp["🔌 MCP server"] --> loop
+
+    subgraph APP["The agentic loop (run_loop)"]
+        loop["🧩 extract → 🏭 generate → 🔎 validate<br/>→ 🔧 repair → 🎯 anomalies"]
+    end
+
+    loop -->|"reasoning: extract · repair · detect"| claude["✨ Claude API<br/>claude-opus-4-8"]:::claude
+    loop --> out["📦 SDTM CSVs · report · manifest"]
+
+    classDef claude fill:#5b3df5,stroke:#3a24b3,color:#ffffff;
+```
+
+- **CI/CD:** every push to `main` runs `Lint + Test`; **only a green build** triggers the deploy
+  job, which POSTs a Render deploy hook — a failing build never ships. `main` is branch-protected
+  (PR + passing CI required).
+- **Cloud host:** Render builds the same non-root `Dockerfile` and runs the Gradio app, injecting
+  `ANTHROPIC_API_KEY` as a secret (never in the image). The app honors Render's `$PORT`.
+- **Runtime:** the UI, CLI, and MCP server all drive the identical `run_loop`; Claude does the
+  reasoning (extract · repair · detect) while deterministic Python generates the SDTM data.
+
 ## Architecture (one loop)
 
 ```mermaid
