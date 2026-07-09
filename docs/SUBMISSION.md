@@ -28,19 +28,18 @@ endpoints, populations, assessments. It's just locked in prose. **Claude is very
 reading that prose and emitting a structured design.** Once the design is structured,
 generation and validation can be automated and self-correcting.
 
-## From protocol to lakehouse — accelerate analytics before the EDC exists
+## Business value / GTM
 
-This is the business value in one line: **you don't need a live EDC to start analytics.**
-In a normal program, biostatistics and data engineering can't build or validate their SAP
-and analysis pipelines until a Medidata Rave or Veeva Vault EDC is stood up and the study
-database is designed — months of critical-path setup. `protocol-to-data` breaks that
-dependency. From the protocol alone it emits **SDTM-shaped, referentially-sound Parquet that
-lands directly in a Databricks / Spark lakehouse on day one.** Teams build and test their
-ingestion, transformation, and analysis pipelines against realistic, PHI-free, seed-
-reproducible data **before the EDC is built** — then swap in real clinical extracts at
-database lock with zero pipeline rework. The EDC ODM-XML export targets (Rave, Veeva) are on
-the v2 roadmap; the **Databricks analytics path is the value delivered today** — which is why
-"SDTM (Parquet) – Databricks Analytics Ready" is the default export format in the UI.
+### 🚀 From Protocol to Lakehouse (Day-One Analytics)
+
+A critical bottleneck in clinical trials is the "data desert"—the months-long delay where downstream analytics teams wait for operational EDC systems (e.g., Medidata Rave, Veeva Vault) to be designed, deployed, and populated.
+
+**`protocol-to-data`** solves this by outputting strictly typed **SDTM Parquet files**. Instead of waiting for the EDC, clinical data engineering teams can drop our synthetic datasets directly into a **Databricks** or Apache Spark environment on day one. This allows biostatisticians to write, test, and validate their Statistical Analysis Plan (SAP) pipelines concurrently with site activation, accelerating time-to-insight.
+
+> **Positioning:** a *downstream pipeline accelerator*, not an EDC replacement. It complements
+> Rave/Veeva — teams build against realistic synthetic data now, then swap in real extracts at
+> database lock with zero pipeline rework (the ODM-XML export targets are on the v2 roadmap).
+> This is why **"SDTM (Parquet) – Databricks Analytics Ready"** is the default export in the UI.
 
 ## What it does
 
