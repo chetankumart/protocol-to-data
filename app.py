@@ -25,6 +25,7 @@ import cli  # noqa: E402  — reuse its .env loader
 from protocol_to_data.anomalies import (  # noqa: E402
     detect_anomalies, inject_anomalies, score_detections, scorecard_markdown,
 )
+from protocol_to_data import ctg_validator  # noqa: E402  — read-only registry cross-check (display only)
 from protocol_to_data import rbac  # noqa: E402  — RBAC stubs (not enforced; see rbac.py)
 from protocol_to_data.history import list_runs, load_run, run_label, save_run  # noqa: E402
 from protocol_to_data.llm import reset_usage, usage_summary  # noqa: E402  — cost tracking
@@ -127,7 +128,7 @@ def _final_payload(holder: dict) -> dict:
     res = holder.get("result")
     if res is None:
         return {"design_json": "{}", "domains": [], "output_dir": "", "scorecard": "",
-                "usage_badge": _usage_badge(holder.get("usage"))}
+                "usage_badge": _usage_badge(holder.get("usage")), "skeleton": {}}
     out_dir = Path(res.output_dir)
     domains = sorted(p.stem.upper() for p in out_dir.glob("*.csv"))
     return {
@@ -136,6 +137,12 @@ def _final_payload(holder: dict) -> dict:
         "output_dir": str(out_dir),
         "scorecard": scorecard_markdown(holder.get("score")),
         "usage_badge": _usage_badge(holder.get("usage")),
+        # High-level skeleton for the (read-only) registry cross-check — NOT used for generation.
+        "skeleton": {
+            "num_arms": len(res.design.arms),
+            "phase": res.design.phase,
+            "enrollment": res.design.population.n_subjects,
+        },
     }
 
 
@@ -164,6 +171,48 @@ def _resolve_port(env: dict | None = None) -> int:
     → explicit GRADIO_SERVER_PORT → 7860."""
     env = os.environ if env is None else env
     return int(env.get("PORT") or env.get("GRADIO_SERVER_PORT") or "7860")
+
+
+def _crosscheck_hint() -> str:
+    return ("_Enter an NCT ID above and run to cross-check the extracted design against "
+            "ClinicalTrials.gov — **read-only**, never used to generate data._")
+
+
+def _phase_digits(p) -> str:
+    """Reduce a phase label to comparable digits/slashes: 'Phase 3' / 'PHASE3' / '3' → '3'."""
+    return "".join(ch for ch in str(p) if ch.isdigit() or ch == "/")
+
+
+def _render_crosscheck(extracted: dict, nct_id: str) -> str:
+    """READ-ONLY registry badge: compare the extracted skeleton to ClinicalTrials.gov.
+
+    Purely for display — the CTG data is NEVER fed into SDTM generation. Returns Markdown.
+    """
+    if not nct_id or not nct_id.strip():
+        return _crosscheck_hint()
+    reg = ctg_validator.fetch_ctg_baseline(nct_id)
+    if "error" in reg:
+        return f"⚠️ **Registry cross-check unavailable** — {reg['error']}"
+
+    def row(label, ext, regv, match):
+        return f"| {label} | `{ext}` | `{regv}` | {'✅ Match' if match else '⚠️ Differs'} |"
+
+    ph_e, ph_r = extracted.get("phase"), reg.get("phase")
+    ar_e, ar_r = extracted.get("num_arms"), reg.get("num_arms")
+    en_e, en_r = extracted.get("enrollment"), reg.get("enrollment")
+    return "\n".join([
+        f"**Extracted design vs. [ClinicalTrials.gov {reg['nct_id']}]"
+        f"(https://clinicaltrials.gov/study/{reg['nct_id']}) — read-only**",
+        "",
+        "| Field | Extracted (Claude) | Registry (CTG) | |",
+        "|---|---|---|---|",
+        row("Phase", ph_e, ph_r, _phase_digits(ph_e) == _phase_digits(ph_r)),
+        row("Number of arms", ar_e, ar_r, ar_e == ar_r),
+        row("Target enrollment", en_e, en_r, en_e == en_r),
+        "",
+        "<sub>🔒 Registry data is display-only — it does **not** feed SDTM generation. "
+        "Enrollment can legitimately differ (protocol *planned* vs registry *actual*).</sub>",
+    ])
 
 
 def _build_marker(env: dict | None = None) -> str:
@@ -198,6 +247,8 @@ def build_ui():
                 anomalies = gr.Slider(0, 5, value=5, step=1, label="Anomalies to inject + detect")
                 export_format = gr.Dropdown(label="Target Export Format", choices=EXPORT_FORMATS,
                                             value=EXPORT_SDTM, interactive=True)
+                nct_input = gr.Textbox(label="NCT ID (Optional - For Registry Cross-Check)",
+                                       placeholder="e.g. NCT04303780", value="")
                 run_btn = gr.Button("▶  Run the loop", variant="primary")
                 history_dd = gr.Dropdown(label="📁 Load a previous run", choices=_run_choices(),
                                          value=None, interactive=True)
@@ -208,6 +259,8 @@ def build_ui():
 
         with gr.Accordion("🧩 Extracted ProtocolDesign", open=False):
             design_code = gr.Code(language="json", label="design (post-repair)")
+        with gr.Accordion("🏛️ Registry Cross-Check", open=True):
+            crosscheck_md = gr.Markdown(_crosscheck_hint())
         with gr.Accordion("🏭 Generated SDTM data", open=True):
             domain_dd = gr.Dropdown(label="Domain", choices=[], interactive=True)
             data_df = gr.Dataframe(label="Preview (first 200 rows)", interactive=False, wrap=True)
@@ -218,7 +271,7 @@ def build_ui():
         # the page (Render sets RENDER_GIT_COMMIT; 'local' off-platform).
         gr.Markdown(f"<sub>🧬 protocol-to-data · build `{_build_marker()}`</sub>")
 
-        def on_run(file, use_samp, subj, sd, anom, export_fmt):
+        def on_run(file, use_samp, subj, sd, anom, export_fmt, nct_id):
             rbac.require_write()  # RBAC injection point: running/generating is a write op (CDM)
             warning = _export_warning(export_fmt)  # EDC targets → roadmap notice, fall back to SDTM
             path = str(SAMPLE) if (use_samp or not file) else (file.name if hasattr(file, "name") else file)
@@ -230,6 +283,8 @@ def build_ui():
                     yield {
                         narration: warning + text,
                         design_code: extras["design_json"],
+                        # Read-only registry badge — CTG data is display-only, never fed to generation.
+                        crosscheck_md: _render_crosscheck(extras.get("skeleton", {}), nct_id),
                         domain_dd: gr.update(choices=domains, value=(domains[0] if domains else None)),
                         out_dir_state: extras["output_dir"],
                         scorecard: extras["scorecard"],
@@ -253,9 +308,9 @@ def build_ui():
                 data_df: _load_domain_csv(data["output_dir"], domains[0] if domains else ""),
             }
 
-        run_btn.click(on_run, [file_in, use_sample, subjects, seed, anomalies, export_format],
-                      [narration, design_code, domain_dd, out_dir_state, scorecard, data_df,
-                       history_dd, usage_badge])
+        run_btn.click(on_run, [file_in, use_sample, subjects, seed, anomalies, export_format, nct_input],
+                      [narration, design_code, crosscheck_md, domain_dd, out_dir_state, scorecard,
+                       data_df, history_dd, usage_badge])
         history_dd.change(on_load_run, [history_dd],
                           [narration, design_code, domain_dd, out_dir_state, scorecard, data_df])
         domain_dd.change(_load_domain_csv, [out_dir_state, domain_dd], data_df)

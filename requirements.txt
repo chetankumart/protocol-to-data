@@ -5,3 +5,4 @@ pdfplumber>=0.11
 beautifulsoup4>=4.12
 pytest>=8.0
 gradio>=4.44   # web UI (app.py); core CLI works without it
+curl_cffi>=0.7  # browser-TLS fetch for the read-only ClinicalTrials.gov cross-check (WAF bypass)
