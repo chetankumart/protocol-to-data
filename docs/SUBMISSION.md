@@ -7,6 +7,8 @@
 **Demo video:** _(link)_
 **Run it:** CLI — `ptd run examples/sample_protocol.md --subjects 40 --seed 42 --anomalies 5` · Web UI — `python app.py` · MCP — `python mcp_server.py` (Claude Desktop / any MCP client)
 
+> **Note:** The live demo is hosted on a free Render tier (512MB RAM). It perfectly runs the bundled CARDIO-HF sample for evaluation. If you wish to test the full PDF extraction engine with massive protocols, please run the provided Docker container locally to avoid cloud out-of-memory limits.
+
 ---
 
 ## Tagline
