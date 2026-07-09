@@ -2,6 +2,8 @@
 
 > **From a clinical trial protocol to an analyzable synthetic dataset — in one agentic loop, driven by Claude.**
 
+**🔗 Live demo → [protocol-to-data.onrender.com](https://protocol-to-data.onrender.com)** &nbsp;·&nbsp; _free tier — first load takes ~30–60 s to wake, then it's instant._
+
 A researcher, clinical data manager, or biotech engineer drops in a study protocol
 (PDF / HTML / text). Claude reads it, extracts the trial design, and a deterministic engine
 generates a **therapeutic-area-aware, dictionary-coded, referentially-sound SDTM dataset** —
