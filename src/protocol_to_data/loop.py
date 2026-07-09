@@ -56,6 +56,9 @@ def run_loop(protocol_path: str | Path, *, subjects: int, seed: int,
         say("🏭  Generating synthetic data ...")
         out_dir = generate_dataset(design, subjects=subjects, seed=seed,
                                    out_root=out_root, backend=backend)
+        # generate_dataset asserts referential + temporal integrity before it writes — if we
+        # got here, that verify-before-write gate passed. Surface it for transparency.
+        say("    🔗  Integrity verified — no orphan USUBJID / VISITNUM before write")
 
         say("🔎  Validating ...")
         report = validate_dataset(design, out_dir)

@@ -266,6 +266,25 @@ _ONC_LB_PANEL = [
 ]
 
 
+def _drug_effect(tc: str, i: int, *, docetaxel: bool, sotorasib: bool) -> float:
+    """Deterministic biological-context rule: multiplier on a lab value at visit index `i`.
+
+    The therapeutic-area clinical rules are declared here — cleanly separated from row
+    assembly and injected per-arm — so the biology is explicit and standardized, not left to
+    chance. Each effect is documented to its known pharmacology:
+      • docetaxel → myelosuppression: neutrophils fall to a nadir (grade-4 possible); platelets fall.
+      • sotorasib (AMG 510) → transaminitis: ALT/AST rise over exposure.
+    Returns 1.0 (no effect) for any (analyte, arm) pair without a defined rule.
+    """
+    if docetaxel and tc == "NEUT":
+        return max(1 - 0.15 * min(i, 3), 0.30)   # neutropenia nadir (grade-4 preserved)
+    if docetaxel and tc == "PLT":
+        return max(1 - 0.10 * min(i, 3), 0.40)   # thrombocytopenia
+    if sotorasib and tc in ("ALT", "AST"):
+        return min(1 + 0.18 * min(i, 4), 2.5)    # hepatotoxicity signal
+    return 1.0
+
+
 def _gen_lb_oncology(design: ProtocolDesign, subs: list[dict], rng: random.Random) -> pd.DataFrame:
     """NSCLC labs: full panel + arm-specific drug effects (docetaxel myelosuppression,
     sotorasib transaminitis) + a plasma PK concentration at each treatment visit."""
@@ -279,13 +298,8 @@ def _gen_lb_oncology(design: ProtocolDesign, subs: list[dict], rng: random.Rando
         for i, v in enumerate(visits):
             vdate = _visit_date(s["RFSTDTC"], getattr(v, "day", 1))
             for tc, unit, mean, sd, dec in _ONC_LB_PANEL:
-                val = rng.gauss(mean, sd)
-                if docetaxel and tc == "NEUT":
-                    val *= max(1 - 0.15 * min(i, 3), 0.30)   # neutropenia nadir
-                elif docetaxel and tc == "PLT":
-                    val *= max(1 - 0.10 * min(i, 3), 0.40)   # thrombocytopenia
-                elif sotorasib and tc in ("ALT", "AST"):
-                    val *= min(1 + 0.18 * min(i, 4), 2.5)    # hepatotoxicity signal
+                # draw, then apply the declared biological-context rule for this (analyte, arm)
+                val = rng.gauss(mean, sd) * _drug_effect(tc, i, docetaxel=docetaxel, sotorasib=sotorasib)
                 seq[s["USUBJID"]] = seq.get(s["USUBJID"], 0) + 1
                 rows.append({
                     "STUDYID": design.study_id, "USUBJID": s["USUBJID"],
