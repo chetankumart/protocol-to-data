@@ -150,21 +150,28 @@ end-to-end, with a full offline test suite and CI. See
 
 ## 🤝 Contributing
 
-PRs welcome. Every push and pull request runs the **GitHub Actions CI**
-([`.github/workflows/ci.yml`](.github/workflows/ci.yml)), which must pass before review:
+PRs welcome — but this project runs a **strict, fork-and-PR contribution policy** to keep the
+codebase small and sharp. **Please read [`CONTRIBUTING.md`](CONTRIBUTING.md) in full before
+opening a Pull Request.** It's a hard requirement, not a suggestion — PRs that ignore it are
+closed with a pointer back to it.
 
-1. **`ruff check .`** — code quality / lint
-2. **`pytest`** — the full offline test suite (schemas, generation, referential + temporal
-   integrity, dictionary coding, validation, the repair loop, and anomaly detection). No API
-   key required — all LLM calls are mocked.
+In short:
 
-Please run both locally before opening a PR:
+- **Fork & PR only.** No direct push access; branch from `main` in your fork and open a PR.
+  Discuss anything non-trivial in an **Issue first**.
+- **Atomic, human-reviewed changes.** AI assistants are welcome, but large unsolicited
+  AI-generated refactors or feature dumps are closed without review. One logical change per PR,
+  and you own every line.
+- **Green CI is mandatory.** `ruff check .` and `pytest` must pass locally before you submit —
+  [GitHub Actions](.github/workflows/ci.yml) blocks any failing PR.
 
 ```bash
-pip install ruff pytest
-ruff check .
-pytest -q
+pip install -r requirements.txt ruff pytest
+ruff check .          # → All checks passed!
+pytest -q             # → 88 passed  (offline; no API key needed)
 ```
+
+See **[`CONTRIBUTING.md`](CONTRIBUTING.md)** for the full guidelines.
 
 ## License
 
