@@ -18,6 +18,12 @@ ptd run data/protocols/Prot_000-amgen.pdf --subjects 40 --seed 42 --anomalies 5
 Or the web UI (nicer visual): `python app.py` → upload the Amgen PDF → subjects 40, seed 42,
 anomalies 5 → **Run the loop**.
 
+> **Live cloud option:** the exact same UI is public at **https://protocol-to-data.onrender.com**
+> (free Render tier). You can record straight from the cloud URL to prove it's really deployed —
+> just **pre-warm it** (open it once ~1 min before recording; the free instance cold-starts in
+> ~30–60 s after idle). Local `python app.py` is faster/steadier for the take; the cloud URL is
+> the "and it's live, try it yourself" closer.
+
 ## ⚠️ Pre-flight (do this BEFORE recording — it protects the Flex beat)
 
 Some of the payoff comes from Claude's **semantic** anomaly detector, which is
@@ -110,4 +116,6 @@ Deterministic-friendly and no large PDF. Use if the oncology take won't cooperat
 - Live extraction/repair on the 179-page PDF takes ~1–2 min — **cut the dead air in editing**;
   jump-cut from "Extracting…" to the results.
 - Keep total under 3 min.
-- Close on the repo URL + "Built with Claude: Life Sciences — Build Track".
+- Close on the repo URL + the **live demo (`protocol-to-data.onrender.com`)** + "Built with
+  Claude: Life Sciences — Build Track". The "it's deployed, judges can run it themselves" line
+  lands the enterprise-readiness story.

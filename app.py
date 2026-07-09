@@ -10,6 +10,7 @@ browse the generated SDTM CSVs and the anomaly scorecard. Reuses the agent uncha
 
 from __future__ import annotations
 
+import os
 import queue
 import sys
 import threading
@@ -150,6 +151,21 @@ def _run_choices() -> list[tuple[str, str]]:
     return [(run_label(m), m["dir"]) for m in list_runs()]
 
 
+def _resolve_host(env: dict | None = None) -> str:
+    """Bind address: local dev stays on 127.0.0.1 (safe); containers / hosted platforms need
+    0.0.0.0. Hugging Face Spaces sets SPACE_ID (auto-bind); GRADIO_SERVER_NAME overrides."""
+    env = os.environ if env is None else env
+    default_host = "0.0.0.0" if env.get("SPACE_ID") else "127.0.0.1"
+    return env.get("GRADIO_SERVER_NAME", default_host)
+
+
+def _resolve_port(env: dict | None = None) -> int:
+    """Listen port. Precedence: platform-assigned PORT (Render / Railway / Fly / Cloud Run)
+    → explicit GRADIO_SERVER_PORT → 7860."""
+    env = os.environ if env is None else env
+    return int(env.get("PORT") or env.get("GRADIO_SERVER_PORT") or "7860")
+
+
 def build_ui():
     import gradio as gr
 
@@ -235,18 +251,10 @@ def build_ui():
 
 
 if __name__ == "__main__":
-    import os
-
     import gradio as gr
 
-    # Bind address is env-driven: local dev stays on 127.0.0.1 (safe); containers and hosted
-    # platforms need 0.0.0.0. Hugging Face Spaces sets SPACE_ID, so we auto-bind there.
-    default_host = "0.0.0.0" if os.environ.get("SPACE_ID") else "127.0.0.1"
-    # Port precedence: platform-assigned PORT (Render/Railway/Fly/Cloud Run) → explicit
-    # GRADIO_SERVER_PORT → 7860.
-    port = os.environ.get("PORT") or os.environ.get("GRADIO_SERVER_PORT") or "7860"
     build_ui().queue().launch(
         theme=gr.themes.Soft(),
-        server_name=os.environ.get("GRADIO_SERVER_NAME", default_host),
-        server_port=int(port),
+        server_name=_resolve_host(),   # 0.0.0.0 on Spaces/containers, 127.0.0.1 locally
+        server_port=_resolve_port(),   # honors a platform-assigned $PORT (Render/Fly/…)
     )

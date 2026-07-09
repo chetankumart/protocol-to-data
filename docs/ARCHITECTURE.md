@@ -5,25 +5,32 @@
 ```mermaid
 flowchart TD
     P["📄 Protocol<br/>(pdf / html / md / txt)"] --> I1["1 · INGEST<br/>read → plain text"]
-    I1 --> I2["2 · EXTRACT (Claude)<br/>text → ProtocolDesign (typed)"]:::claude
+    I1 -. "PTD_SANITIZE_PHI=1" .-> SP["🔒 PHI/PII scrub<br/>regex + optional Presidio"]:::opt
+    SP -.-> I2
+    I1 --> I2["2 · EXTRACT (Claude)<br/>text → ProtocolDesign (typed)<br/>+ SHA-256 semantic cache"]:::claude
     I2 --> I3["3 · PLAN<br/>which SDTM domains · n · visits"]
-    I3 --> I4["4 · GENERATE<br/>synthetic CSVs per domain"]
+    I3 --> I4["4 · GENERATE<br/>synthetic CSVs per domain<br/>therapeutic-area profiles · dict coding · integrity"]
     EB["ENGINE BRIDGE<br/>(optional backend)"] -. bridge .-> I4
-    I4 --> I5{"5 · VALIDATE<br/>schema · referential + temporal<br/>integrity · clinical rules"}
-    I5 -- pass --> I6["6 · EMIT<br/>dataset + validation report + run manifest"]
+    I4 --> I5{"5 · VALIDATE<br/>schema · referential + temporal<br/>integrity · coverage · clinical rules"}
+    I5 -- pass --> I6["6 · EMIT<br/>dataset + validation report + run manifest<br/>+ snapshot to runs/ · token/cost tally"]
     I5 -- fail --> I5a["5a · REPAIR (Claude)<br/>reads failures, adjusts design / params"]:::claude
     I5a -- bounded retries --> I4
     I6 --> A1["7 · ANOMALY LOOP<br/>inject controlled errors (seeded)"]
     A1 --> A2["detect + explain (Claude)<br/>score N/N caught"]:::claude
 
     classDef claude fill:#5b3df5,stroke:#3a24b3,color:#ffffff;
+    classDef opt fill:#0f766e,stroke:#0b524b,color:#ffffff;
 ```
+
+> Purple = Claude-driven reasoning (extract · repair · detect). Teal = opt-in PHI scrub
+> (off by default). Everything else is deterministic Python.
 
 ## Components
 
 | Module | Responsibility | Claude? |
 |--------|----------------|---------|
-| `src/protocol_to_data/ingest.py` | Load pdf/html/md/txt → normalized text (+ PHI-sanitizer injection point) | no |
+| `src/protocol_to_data/ingest.py` | Load pdf/html/md/txt → normalized text (PHI-sanitizer injection point) | no |
+| `src/protocol_to_data/sanitize.py` | Opt-in PHI/PII scrub (`PTD_SANITIZE_PHI=1`): regex + optional Presidio NER, before Claude sees text | no |
 | `src/protocol_to_data/extract.py` | Text → `ProtocolDesign`, with SHA-256 semantic cache + defensive JSON parsing | **yes** |
 | `src/protocol_to_data/schemas.py` | Typed models (`ProtocolDesign`, `Arm`, `Visit`, `Endpoint`, `DomainPlan`) | no |
 | `src/protocol_to_data/generate.py` | `ProtocolDesign` → per-domain CSVs; therapeutic-area profiles, dictionary coding, referential/temporal integrity guard | no (0 LLM coupling) |
@@ -35,6 +42,38 @@ flowchart TD
 | `src/protocol_to_data/rbac.py` | RBAC injection-point stubs (Clinical Data Manager write / Statistician read) | no |
 | `cli.py` | `ptd run/extract/generate/validate/anomalies` | no |
 | `app.py` | Gradio web UI — upload → live narrated loop → data browser + scorecard + cost badge | no |
+| `mcp_server.py` | FastMCP server exposing `extract_protocol_design` / `generate_sdtm_dataset` / `validate_sdtm_dataset` as MCP tools | **yes (extract)** |
+
+## Surfaces & deployment
+
+The same loop is reachable three ways, and ships as a container for cloud hosting:
+
+```mermaid
+flowchart LR
+    CLI["⌨️ CLI<br/>ptd run/extract/…"] --> L(("run_loop<br/>the agentic loop"))
+    UI["🖥️ Gradio UI<br/>app.py"] --> L
+    MCP["🔌 MCP server<br/>mcp_server.py"] --> L
+    L --> O["📦 SDTM CSVs · report<br/>manifest · runs/ snapshot"]
+
+    subgraph Deploy["deployment targets"]
+      D1["local · python app.py"]
+      D2["Docker / podman<br/>compose up"]
+      D3["Render (free)<br/>render.yaml → Dockerfile"]
+    end
+    UI -. hosted on .-> Deploy
+
+    classDef n fill:#1e293b,stroke:#334155,color:#e2e8f0;
+    class CLI,UI,MCP,O,D1,D2,D3 n;
+```
+
+- **Local:** `python app.py` (binds `127.0.0.1:7860`) or the `ptd` CLI.
+- **Container:** `docker compose up` / `podman-compose up` — `Dockerfile` runs non-root and binds
+  `0.0.0.0` via `GRADIO_SERVER_NAME`.
+- **Cloud:** the [`render.yaml`](../render.yaml) blueprint deploys the same image on Render's free
+  tier — live at **https://protocol-to-data.onrender.com**. `app.py` honors a platform-assigned
+  `$PORT` (precedence `PORT > GRADIO_SERVER_PORT > 7860`; see `_resolve_host` / `_resolve_port`),
+  so it also runs unchanged on Railway / Fly / Cloud Run. `ANTHROPIC_API_KEY` is injected as a
+  host secret, never baked into the image. Full guide: [`DEPLOY.md`](DEPLOY.md).
 
 ## Data contracts
 

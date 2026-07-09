@@ -168,6 +168,11 @@ lean, but showing the shape of production:
 - **PHI/PII sanitization (privacy).** A real de-identification tier (`sanitize.py`): deterministic
   regex for structured identifiers + optional Microsoft Presidio NER for names/locations/dates,
   scrubbing text **before** it reaches the LLM (opt-in via `PTD_SANITIZE_PHI=1`).
+- **Containerized + cloud-deployed (portability).** Ships a non-root `Dockerfile` +
+  `docker-compose.yml`, and a `render.yaml` blueprint that hosts the same image on Render's free
+  tier — **live at https://protocol-to-data.onrender.com** (verified end-to-end in the cloud:
+  self-repair + 5/5 anomalies + $-cost). `app.py` honors a platform-assigned `$PORT`
+  (`PORT > GRADIO_SERVER_PORT > 7860`), so Railway / Fly / Cloud Run run it unchanged.
 
 ## Honest limitations & what's next
 

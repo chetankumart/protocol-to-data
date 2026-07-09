@@ -3,14 +3,14 @@
 Full E2E coverage for CLI, Web UI, generation, the agentic loop, and enterprise features —
 including edge, boundary, malformed, and error cases.
 
-- **Automated:** `74` offline tests (no API key — LLM calls mocked). Run: `pytest -q`.
+- **Automated:** `88` offline tests (no API key — LLM calls mocked). Run: `pytest -q`.
 - **Lint:** `ruff check .` (enforced in CI on every push/PR).
 - **Legend:** ✅ automated · 👤 manual · 🔑 needs a live `ANTHROPIC_API_KEY`.
 
 Run the automated suite anywhere:
 ```bash
 pip install -r requirements.txt ruff
-ruff check . && pytest -q      # expect: All checks passed! · 74 passed
+ruff check . && pytest -q      # expect: All checks passed! · 88 passed
 ```
 
 ---
@@ -23,7 +23,11 @@ ruff check . && pytest -q      # expect: All checks passed! · 74 passed
 | ENV-02 | No secrets in repo | `git ls-files \| grep -E '\.env\|\.key\|\.pdf'` | no matches | 👤 |
 | ENV-03 | Docker image builds | `docker build -t protocol-to-data .` (or `podman build`) | image builds, runs as non-root (uid 10001) | 👤 (verified w/ podman) |
 | ENV-04 | One-command spin-up | `docker compose up` (or `podman-compose up`) | serves on `localhost:7860` | 👤 |
-| ENV-05 | CI on push/PR | push to `main` / open PR | GitHub Actions runs `ruff` + `pytest`, goes green | 👤 (verified 33s) |
+| ENV-05 | CI on push/PR | push to `main` / open PR | GitHub Actions runs `ruff` + `pytest`, goes green | 👤 (verified) |
+| ENV-06 | `render.yaml` blueprint | inspect blueprint config | Docker runtime, free plan, `ANTHROPIC_API_KEY` `sync:false` secret | ✅ (`test_deploy`) |
+| ENV-07 | Host/port resolution | `_resolve_host` / `_resolve_port` under various env | 0.0.0.0 on SPACE_ID; platform `$PORT` wins over 7860 | ✅ (`test_deploy`) |
+| ENV-08 | Dockerfile cloud-ready | inspect Dockerfile | slim base, non-root, `GRADIO_SERVER_NAME=0.0.0.0`, reqs cached | ✅ (`test_deploy`) |
+| ENV-09 | Live cloud deploy | open `protocol-to-data.onrender.com` → run sample | full loop runs; 5/5 anomalies; $-cost logged | 👤 (verified: $0.18, 5/5) |
 
 ## 2. CLI (`ptd`)
 
@@ -94,7 +98,16 @@ ruff check . && pytest -q      # expect: All checks passed! · 74 passed
 | ENT-05 | Deterministic config | `temperature=0.0` only on models that accept it (opus-4-8 omits → no 400) | ✅ (`test_llm_config`) |
 | ENT-06 | RBAC stubs | write/read no-ops at CDM/Statistician injection points | ✅ (`test_enterprise`) |
 | ENT-07 | Run history | snapshot → list → restore; same-second collision safe | ✅ (`test_history`) |
-| ENT-08 | PHI guardrail | sanitizer injection point documented at ingest | 👤 (comment) |
+| ENT-08 | PHI regex scrub | emails/phones/SSN/MRN/URL redacted when `PTD_SANITIZE_PHI=1` | ✅ (`test_sanitize`) |
+| ENT-09 | PHI off by default | text passes through untouched with the flag unset | ✅ (`test_sanitize`) |
+
+## 7a. MCP server (`mcp_server.py`)
+
+| ID | Case | Expected | Cov |
+|----|------|----------|-----|
+| MCP-01 | Tools importable / registered | `extract_protocol_design` / `generate_sdtm_dataset` / `validate_sdtm_dataset` exposed | ✅ (`test_mcp`, importorskip) |
+| MCP-02 | Generate + validate via MCP | deterministic generation + validation callable without a key | ✅ (`test_mcp`) |
+| MCP-03 | Register in Claude Desktop | tool calls succeed from an MCP client | 👤 (`docs/DEPLOY.md` §2) |
 
 ## 8. Edge / boundary / error cases
 
@@ -119,14 +132,15 @@ ruff check . && pytest -q      # expect: All checks passed! · 74 passed
 
 ## 9. Manual pre-submission smoke (do once before submitting)
 
-1. 👤 Fresh clone → `pip install -r requirements.txt` → `ruff check . && pytest -q` → **All green, 74 passed**.
+1. 👤 Fresh clone → `pip install -r requirements.txt` → `ruff check . && pytest -q` → **All green, 88 passed**.
 2. 🔑 `ptd run examples/sample_protocol.md --seed 42 --anomalies 5` → PASS + 5/5 + cost line.
 3. 🔑 `python app.py` → run sample in the browser → narration + data + scorecard + cost badge.
 4. 👤 `docker compose up` (or `podman-compose up`) → `localhost:7860` serves.
-5. 👤 Confirm README screenshot + Mermaid diagrams render on the GitHub page.
+5. 👤 Open **https://protocol-to-data.onrender.com** → run the sample end-to-end in the cloud.
+6. 👤 Confirm README screenshot + Mermaid diagrams render on the GitHub page.
 
 ---
 
 ### Coverage summary
-`74/74` automated tests green · `ruff` clean · CI enforced. Every edge/boundary/error case
+`88/88` automated tests green · `ruff` clean · CI enforced. Every edge/boundary/error case
 above is either covered by an automated test or listed as a one-time manual check.

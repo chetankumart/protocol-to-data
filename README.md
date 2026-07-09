@@ -60,8 +60,9 @@ Hybrid AI by design — **Claude reasons, deterministic Python generates**:
   Protocol tools for Claude Desktop or any MCP client (`pip install ".[mcp]"`).
 - 🔒 **PHI/PII sanitization** — opt-in (`PTD_SANITIZE_PHI=1`): deterministic regex + optional
   Presidio NER scrub the text **before** it reaches the LLM.
-- 🗂️ **Run history · RBAC-aware · EDC-target-aware · Dockerized · CI-guarded** — enterprise seams
-  without over-building. See [`docs/SUBMISSION.md`](docs/SUBMISSION.md) and
+- 🗂️ **Run history · RBAC-aware · EDC-target-aware · Dockerized · CI-guarded · cloud-deployed** —
+  enterprise seams without over-building. Runs unchanged on any `$PORT`-driven host and is
+  **live on Render's free tier**. See [`docs/SUBMISSION.md`](docs/SUBMISSION.md) and
   [`docs/DEPLOY.md`](docs/DEPLOY.md) for the full story.
 
 Safe & shareable: 100% synthetic, no PHI, reproducible with `--seed`.
