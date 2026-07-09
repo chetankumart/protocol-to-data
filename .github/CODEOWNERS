@@ -1,0 +1,19 @@
+# Code owners for protocol-to-data
+# Syntax: https://docs.github.com/articles/about-code-owners
+#
+# Each line maps a path pattern to one or more owners. The LAST matching pattern
+# wins. Owners are auto-requested for review on PRs that touch matching files.
+#
+# NOTE: this file only takes effect for *required* review once
+# "Require review from Code Owners" is enabled in the branch protection for `main`.
+# It is intentionally left OFF while the project is solo-maintained (you cannot
+# approve your own PR). When a second maintainer joins: add them below, add them as
+# a Write collaborator, then enable code-owner reviews + enforce_admins.
+
+# Default owner for everything in the repo.
+*   @chetankumart
+
+# --- future hand-off examples (uncomment + edit when a collaborator joins) -------------
+# /src/protocol_to_data/generate.py   @chetankumart @future-collaborator
+# /docs/                              @chetankumart
+# /.github/                           @chetankumart
