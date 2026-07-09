@@ -239,10 +239,11 @@ if __name__ == "__main__":
 
     import gradio as gr
 
-    # Bind address is env-driven: local dev stays on 127.0.0.1 (safe); containers set
-    # GRADIO_SERVER_NAME=0.0.0.0 so the app is reachable through the mapped port.
+    # Bind address is env-driven: local dev stays on 127.0.0.1 (safe); containers and hosted
+    # platforms need 0.0.0.0. Hugging Face Spaces sets SPACE_ID, so we auto-bind there.
+    default_host = "0.0.0.0" if os.environ.get("SPACE_ID") else "127.0.0.1"
     build_ui().queue().launch(
         theme=gr.themes.Soft(),
-        server_name=os.environ.get("GRADIO_SERVER_NAME", "127.0.0.1"),
+        server_name=os.environ.get("GRADIO_SERVER_NAME", default_host),
         server_port=int(os.environ.get("GRADIO_SERVER_PORT", "7860")),
     )

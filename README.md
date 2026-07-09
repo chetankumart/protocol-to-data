@@ -54,8 +54,13 @@ Hybrid AI by design — **Claude reasons, deterministic Python generates**:
 - ⚡ **Semantic caching** — SHA-256-keyed extraction cache; an identical protocol never pays for
   extraction twice ($0 on a cache hit).
 - 🪙 **Cost observability** — live per-run token + `$` tracking in the UI and CLI.
+- 🔌 **MCP server** — `mcp_server.py` exposes extract / generate / validate as Model Context
+  Protocol tools for Claude Desktop or any MCP client (`pip install ".[mcp]"`).
+- 🔒 **PHI/PII sanitization** — opt-in (`PTD_SANITIZE_PHI=1`): deterministic regex + optional
+  Presidio NER scrub the text **before** it reaches the LLM.
 - 🗂️ **Run history · RBAC-aware · EDC-target-aware · Dockerized · CI-guarded** — enterprise seams
-  without over-building. See [`docs/SUBMISSION.md`](docs/SUBMISSION.md) for the full story.
+  without over-building. See [`docs/SUBMISSION.md`](docs/SUBMISSION.md) and
+  [`docs/DEPLOY.md`](docs/DEPLOY.md) for the full story.
 
 Safe & shareable: 100% synthetic, no PHI, reproducible with `--seed`.
 

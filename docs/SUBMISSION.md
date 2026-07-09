@@ -3,8 +3,9 @@
 **Event:** Built with Claude: Life Sciences (Cerebral Valley × Anthropic × Gladstone Institutes)
 **Track:** Build (Development) — built with Claude Code
 **Repo:** https://github.com/chetankumart/protocol-to-data
+**Live demo:** _(Hugging Face Space URL — see [`docs/DEPLOY.md`](DEPLOY.md))_
 **Demo video:** _(link)_
-**Run it:** CLI — `ptd run examples/sample_protocol.md --subjects 40 --seed 42 --anomalies 5` · Web UI — `python app.py` (upload a protocol, watch the loop stream, browse the data)
+**Run it:** CLI — `ptd run examples/sample_protocol.md --subjects 40 --seed 42 --anomalies 5` · Web UI — `python app.py` · MCP — `python mcp_server.py` (Claude Desktop / any MCP client)
 
 ---
 
@@ -161,6 +162,13 @@ lean, but showing the shape of production:
   today) plus CDASH ODM-XML targets for Medidata Rave and Veeva Vault EDC — which surface a
   v2-roadmap notice and fall back to SDTM, showing awareness of the downstream EDC ecosystem
   without over-building it.
+- **MCP server (Anthropic ecosystem).** The clean hybrid-AI boundary means each capability is
+  an MCP tool: `mcp_server.py` exposes `extract_protocol_design`, `generate_sdtm_dataset`, and
+  `validate_sdtm_dataset` to Claude Desktop / any MCP client — built for where the ecosystem
+  is going, not just a standalone app.
+- **PHI/PII sanitization (privacy).** A real de-identification tier (`sanitize.py`): deterministic
+  regex for structured identifiers + optional Microsoft Presidio NER for names/locations/dates,
+  scrubbing text **before** it reaches the LLM (opt-in via `PTD_SANITIZE_PHI=1`).
 
 ## Honest limitations & what's next
 
