@@ -3,7 +3,7 @@
 **Event:** Built with Claude: Life Sciences (Cerebral Valley × Anthropic × Gladstone Institutes)
 **Track:** Build (Development) — built with Claude Code
 **Repo:** https://github.com/chetankumart/protocol-to-data
-**Live demo:** _(Hugging Face Space URL — see [`docs/DEPLOY.md`](DEPLOY.md))_
+**🔗 Live demo:** `[Insert Render URL Here]`  ← _paste the Render URL (Render free tier — deploy steps in [`docs/DEPLOY.md`](DEPLOY.md) §1a)_
 **Demo video:** _(link)_
 **Run it:** CLI — `ptd run examples/sample_protocol.md --subjects 40 --seed 42 --anomalies 5` · Web UI — `python app.py` · MCP — `python mcp_server.py` (Claude Desktop / any MCP client)
 
