@@ -180,10 +180,18 @@ def _resolve_port(env: dict | None = None) -> int:
 
 _NCT_RE = re.compile(r"NCT\d{8}")
 
-_CROSSCHECK_IDLE = ("_Run a protocol — if its text contains an NCT ID, it's auto-validated "
-                    "against ClinicalTrials.gov here (read-only)._")
-_NO_NCT_MSG = ("**🏛️ Registry Cross-Check**\n\n"
+# Captions are folded INTO the single dynamic markdown per accordion. A separate caption component
+# stacks a second block, and the theme draws an accent border between blocks that clips the text —
+# one block per accordion avoids it.
+_CROSSCHECK_CAPTION = ("_Read-only comparison. Data generation is driven strictly by your uploaded "
+                       "protocol document, not the registry._")
+_CROSSCHECK_IDLE = (f"{_CROSSCHECK_CAPTION}\n\n"
+                    "_Run a protocol — if its text contains an NCT ID, it's auto-validated "
+                    "against ClinicalTrials.gov here._")
+_NO_NCT_MSG = (f"{_CROSSCHECK_CAPTION}\n\n"
                "No Registry ID detected (Likely a pre-registration or private protocol).")
+_SCORECARD_CAPTION = ("_An automated Data Quality (DQ) review tracking how many injected errors "
+                      "were successfully caught by the system's validation logic._")
 
 
 def _detect_nct(protocol_path: str) -> str | None:
@@ -214,7 +222,7 @@ def _render_crosscheck(extracted: dict, nct_id: str | None) -> str:
         return _NO_NCT_MSG
     reg = ctg_validator.fetch_ctg_baseline(nct_id)
     if "error" in reg:
-        return f"⚠️ **Registry cross-check unavailable** — {reg['error']}"
+        return f"{_CROSSCHECK_CAPTION}\n\n⚠️ **Registry cross-check unavailable** — {reg['error']}"
 
     def row(label, ext, regv, match):
         return f"| {label} | `{ext}` | `{regv}` | {'✅ Match' if match else '⚠️ Differs'} |"
@@ -222,7 +230,7 @@ def _render_crosscheck(extracted: dict, nct_id: str | None) -> str:
     ph_e, ph_r = extracted.get("phase"), reg.get("phase")
     ar_e, ar_r = extracted.get("num_arms"), reg.get("num_arms")
     en_e, en_r = extracted.get("enrollment"), reg.get("enrollment")
-    return "\n".join([
+    body = "\n".join([
         f"**Extracted design vs. [ClinicalTrials.gov {reg['nct_id']}]"
         f"(https://clinicaltrials.gov/study/{reg['nct_id']}) — read-only**",
         "",
@@ -235,6 +243,7 @@ def _render_crosscheck(extracted: dict, nct_id: str | None) -> str:
         "<sub>🔒 Registry data is display-only — it does **not** feed SDTM generation. "
         "Enrollment can legitimately differ (protocol *planned* vs registry *actual*).</sub>",
     ])
+    return f"{_CROSSCHECK_CAPTION}\n\n{body}"
 
 
 def _build_marker(env: dict | None = None) -> str:
@@ -373,16 +382,12 @@ def build_ui():
         with gr.Accordion("🧩 Extracted ProtocolDesign", open=False):
             design_code = gr.Code(language="json", label="design (post-repair)")
         with gr.Accordion("🏛️ Registry Cross-Check", open=True):
-            gr.Markdown("_Read-only comparison. Data generation is driven strictly by your "
-                        "uploaded protocol document, not the registry._")
-            crosscheck_md = gr.Markdown(_CROSSCHECK_IDLE)
+            crosscheck_md = gr.Markdown(_CROSSCHECK_IDLE)  # caption folded in (single block)
         with gr.Accordion("🏭 Generated SDTM data", open=True):
             domain_dd = gr.Dropdown(label="Domain", choices=[], interactive=True)
             data_df = gr.Dataframe(label="Preview (first 200 rows)", interactive=False, wrap=True)
         with gr.Accordion("🎯 Anomaly scorecard", open=True):
-            gr.Markdown("_An automated Data Quality (DQ) review tracking how many injected errors "
-                        "were successfully caught by the system's validation logic._")
-            scorecard = gr.Markdown()
+            scorecard = gr.Markdown(_SCORECARD_CAPTION)  # caption folded in (single block)
 
         # Build marker — shows the deployed commit SHA so any deploy is verifiable by loading
         # the page (Render sets RENDER_GIT_COMMIT; 'local' off-platform).
@@ -407,7 +412,7 @@ def build_ui():
                                 crosscheck_md: _render_crosscheck(extras.get("skeleton", {}), nct),
                                 domain_dd: gr.update(choices=domains, value=(domains[0] if domains else None)),
                                 out_dir_state: extras["output_dir"],
-                                scorecard: extras["scorecard"],
+                                scorecard: f"{_SCORECARD_CAPTION}\n\n{extras['scorecard']}",
                                 data_df: _load_domain_csv(extras["output_dir"], domains[0] if domains else ""),
                                 history_dd: gr.update(choices=_run_choices()),  # surface the just-saved run
                                 usage_badge: extras["usage_badge"],
@@ -426,7 +431,7 @@ def build_ui():
                 design_code: data["design_json"],
                 domain_dd: gr.update(choices=domains, value=(domains[0] if domains else None)),
                 out_dir_state: data["output_dir"],
-                scorecard: data["scorecard"],
+                scorecard: f"{_SCORECARD_CAPTION}\n\n{data['scorecard']}",
                 data_df: _load_domain_csv(data["output_dir"], domains[0] if domains else ""),
             }
 
