@@ -28,6 +28,10 @@ _NEED_DATA_MSG = (
     "Please generate a dataset first — run a protocol in the **⚙️ Pipeline** tab, then come back "
     "to chat with the results."
 )
+_SQL_GUARDRAIL_MSG = (
+    "⚠️ Demo Guardrail: I could not generate a safe query for that request. Try asking about "
+    "patient demographics or adverse events."
+)
 
 
 def _domain_tables(output_dir: str) -> list[tuple[str, Path]]:
@@ -88,25 +92,28 @@ def answer(query: str, output_dir: str) -> str:
     if not tables:
         return _NEED_DATA_MSG
 
-    con = _connect(tables)
     try:
-        schema = _schema_text(con, tables)
-        sql = _sql_only(llm.complete(
-            f"Table schemas:\n{schema}\n\nUser question: {query}",
-            system=_SQL_SYSTEM, model=llm.MODEL_CHEAP, max_tokens=500,
-        ))
+        con = _connect(tables)
         try:
-            cur = con.execute(f"SELECT * FROM ({sql}) AS _q LIMIT {_RESULT_ROW_CAP}")
-            rows = cur.fetchall()
-            cols = [d[0] for d in cur.description]
-        except Exception as e:  # noqa: BLE001 — bad SQL/columns → surface, never crash the chat
-            return f"I couldn't run that query.\n\n**SQL:** `{sql}`\n\n**Error:** {e}"
-        snippet = _rows_to_markdown(cols, rows)
-        return llm.complete(
-            f"Question: {query}\n\nSQL:\n{sql}\n\nResult (first {_RESULT_ROW_CAP} rows):\n{snippet}"
-            "\n\nAnswer the question in 1-3 sentences using ONLY this result. If it's empty, say "
-            "no matching records were found.",
-            system=_ANSWER_SYSTEM, model=llm.MODEL_CHEAP, max_tokens=400,
-        )
-    finally:
-        con.close()
+            schema = _schema_text(con, tables)
+            sql = _sql_only(llm.complete(
+                f"Table schemas:\n{schema}\n\nUser question: {query}",
+                system=_SQL_SYSTEM, model=llm.MODEL_CHEAP, max_tokens=500,
+            ))
+            try:
+                cur = con.execute(f"SELECT * FROM ({sql}) AS _q LIMIT {_RESULT_ROW_CAP}")
+                rows = cur.fetchall()
+                cols = [d[0] for d in cur.description]
+            except Exception:  # noqa: BLE001 — invalid/unsafe SQL → graceful demo message
+                return _SQL_GUARDRAIL_MSG
+            snippet = _rows_to_markdown(cols, rows)
+            return llm.complete(
+                f"Question: {query}\n\nSQL:\n{sql}\n\nResult (first {_RESULT_ROW_CAP} rows):\n"
+                f"{snippet}\n\nAnswer the question in 1-3 sentences using ONLY this result. If it's "
+                "empty, say no matching records were found.",
+                system=_ANSWER_SYSTEM, model=llm.MODEL_CHEAP, max_tokens=400,
+            )
+        finally:
+            con.close()
+    except Exception:  # noqa: BLE001 — any unexpected failure (LLM/API/duckdb) degrades gracefully
+        return _SQL_GUARDRAIL_MSG

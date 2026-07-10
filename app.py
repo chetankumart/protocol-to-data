@@ -340,12 +340,32 @@ _CTA_CSS = """
 """
 
 
+# Demo guardrails on the Data Copilot — protect the 512MB instance + API budget.
+_COPILOT_MAX_CHARS = 150
+_COPILOT_MAX_QUERIES = 3
+
+
+def _user_turn_count(history) -> int:
+    """Completed user turns so far (robust to messages-dict or [user, bot] tuple history)."""
+    if not history:
+        return 0
+    if isinstance(history[0], dict):  # Gradio messages format: {"role", "content"}
+        return sum(1 for m in history if m.get("role") == "user")
+    return len(history)  # legacy tuples format
+
+
 def copilot_respond(message: str, history, output_dir: str) -> str:
     """gr.ChatInterface handler → route the message to the DuckDB-backed Data Copilot.
 
-    ``output_dir`` arrives from the shared ``out_dir_state`` (additional_inputs) — empty until a
-    pipeline run has produced data, in which case the copilot returns a friendly "run first" note.
+    Enforces demo guardrails BEFORE any LLM call: a 150-char complexity cap and a 3-query/session
+    turn limit. ``output_dir`` arrives from the shared ``out_dir_state`` (additional_inputs).
     """
+    if len(message) > _COPILOT_MAX_CHARS:
+        return ("⚠️ Demo Guardrail: Query is too complex or long. Please keep questions under "
+                "150 characters for this cloud demo.")
+    if _user_turn_count(history) >= _COPILOT_MAX_QUERIES:
+        return ("🛑 Demo Limit Reached: You have used your 3 queries for this session. Please run "
+                "a new protocol extraction to reset the Copilot.")
     return copilot.answer(message, output_dir or "")
 
 
@@ -411,7 +431,8 @@ def build_ui():
                     "**Chat with your generated SDTM datasets.** Ask in plain English — a DuckDB "
                     "query runs directly against the on-disk data (memory-safe, no full-file "
                     "loads), then Claude explains the result. _Run a protocol in the ⚙️ Pipeline "
-                    "tab first._"
+                    "tab first._\n\n"
+                    "> **Demo Mode: Limited to 3 queries per run. Max 150 characters.**"
                 )
                 gr.ChatInterface(
                     copilot_respond,
