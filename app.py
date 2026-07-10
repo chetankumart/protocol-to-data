@@ -316,10 +316,24 @@ def api_run(file_path: str, use_sample: bool = True, subjects: int = 40, seed: i
     return resp
 
 
+# High-contrast CTA styling so the primary "Run the loop" button pops out of the input column.
+_CTA_CSS = """
+#main_run_btn {
+    background: linear-gradient(90deg, #11998e 0%, #38ef7d 100%);
+    color: white;
+    border: none;
+    font-weight: bold;
+    font-size: 1.1em;
+    transition: transform 0.2s;
+}
+#main_run_btn:hover { transform: scale(1.02); }
+"""
+
+
 def build_ui():
     import gradio as gr
 
-    with gr.Blocks(title="protocol-to-data") as demo:
+    with gr.Blocks(title="protocol-to-data", css=_CTA_CSS) as demo:
         gr.Markdown(
             "# 🧬 protocol-to-data\n"
             "**From a clinical trial protocol to an analyzable synthetic dataset — one agentic "
@@ -348,7 +362,7 @@ def build_ui():
                 export_format = gr.Dropdown(
                     label="Target Export Format", choices=EXPORT_FORMATS, value=EXPORT_SDTM,
                     interactive=True, info="SDTM delivered today; EDC ODM-XML on the v2 roadmap.")
-                run_btn = gr.Button("▶  Run the loop", variant="primary")
+                run_btn = gr.Button("▶  Run the loop", variant="primary", elem_id="main_run_btn")
                 history_dd = gr.Dropdown(label="📁 Load a previous run", choices=_run_choices(),
                                          value=None, interactive=True)
             with gr.Column(scale=2):
