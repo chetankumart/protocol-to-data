@@ -325,7 +325,8 @@ def build_ui():
             "**From a clinical trial protocol to an analyzable synthetic dataset — one agentic "
             "loop, driven by Claude.** Upload a protocol (PDF / HTML / text), or use the bundled "
             "sample, and watch Claude extract the design, generate SDTM-shaped data, validate, "
-            "and self-repair."
+            "and self-repair.\n\n"
+            "**3 steps: Extract → Generate → Self-Validate.**"
         )
         out_dir_state = gr.State("")
 
@@ -336,27 +337,37 @@ def build_ui():
                 url_in = gr.Textbox(label="Or paste a Protocol URL (PDF/HTML/Text)",
                                     placeholder="https://...")
                 use_sample = gr.Checkbox(label="Use bundled CARDIO-HF sample", value=True)
+                gr.Markdown("<sub>Priority: Sample → URL → File upload.</sub>")
                 subjects = gr.Slider(4, 100, value=40, step=1, label="Subjects")
-                seed = gr.Number(value=42, precision=0, label="Seed (reproducible)")
-                anomalies = gr.Slider(0, 5, value=5, step=1, label="Anomalies to inject + detect")
-                export_format = gr.Dropdown(label="Target Export Format", choices=EXPORT_FORMATS,
-                                            value=EXPORT_SDTM, interactive=True)
+                seed = gr.Number(value=42, precision=0, label="Seed (reproducible)",
+                                 info="Same protocol + seed → identical data (reproducible).")
+                anomalies = gr.Slider(
+                    0, 5, value=5, step=1, label="Inject Noise for Pipeline Testing (Anomalies)",
+                    info="Intentionally inject protocol deviations/data errors to test your "
+                         "downstream validation scripts.")
+                export_format = gr.Dropdown(
+                    label="Target Export Format", choices=EXPORT_FORMATS, value=EXPORT_SDTM,
+                    interactive=True, info="SDTM delivered today; EDC ODM-XML on the v2 roadmap.")
                 run_btn = gr.Button("▶  Run the loop", variant="primary")
                 history_dd = gr.Dropdown(label="📁 Load a previous run", choices=_run_choices(),
                                          value=None, interactive=True)
             with gr.Column(scale=2):
-                narration = gr.Textbox(label="Live agent narration", lines=17,
-                                       max_lines=17, interactive=False, autoscroll=True)
+                narration = gr.Textbox(label="Live agent narration", lines=25,
+                                       max_lines=25, interactive=False, autoscroll=True)
                 usage_badge = gr.Markdown("🪙 Run Cost: —")  # cumulative tokens + $ for this run
 
         with gr.Accordion("🧩 Extracted ProtocolDesign", open=False):
             design_code = gr.Code(language="json", label="design (post-repair)")
         with gr.Accordion("🏛️ Registry Cross-Check", open=True):
+            gr.Markdown("_Read-only comparison. Data generation is driven strictly by your "
+                        "uploaded protocol document, not the registry._")
             crosscheck_md = gr.Markdown(_CROSSCHECK_IDLE)
         with gr.Accordion("🏭 Generated SDTM data", open=True):
             domain_dd = gr.Dropdown(label="Domain", choices=[], interactive=True)
             data_df = gr.Dataframe(label="Preview (first 200 rows)", interactive=False, wrap=True)
         with gr.Accordion("🎯 Anomaly scorecard", open=True):
+            gr.Markdown("_An automated Data Quality (DQ) review tracking how many injected errors "
+                        "were successfully caught by the system's validation logic._")
             scorecard = gr.Markdown()
 
         # Build marker — shows the deployed commit SHA so any deploy is verifiable by loading
