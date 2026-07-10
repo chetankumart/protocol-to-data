@@ -352,7 +352,7 @@ def build_ui():
                 history_dd = gr.Dropdown(label="📁 Load a previous run", choices=_run_choices(),
                                          value=None, interactive=True)
             with gr.Column(scale=2):
-                narration = gr.Textbox(label="Live agent narration", lines=25,
+                narration = gr.Textbox(label="Live agent narration", lines=10,
                                        max_lines=25, interactive=False, autoscroll=True)
                 usage_badge = gr.Markdown("🪙 Run Cost: —")  # cumulative tokens + $ for this run
 
