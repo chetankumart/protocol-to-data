@@ -116,13 +116,16 @@ client = Client("https://protocol-to-data.onrender.com")
 result = client.predict(
     file_path="", use_sample=True, subjects=40, seed=42, anomalies=0,
     export_format="SDTM (Parquet) - Databricks Analytics Ready",
-    nct_id="NCT04303780", api_name="/generate_synthetic_data",
+    protocol_url="",   # or pass a public PDF/HTML/text URL instead of use_sample
+    api_name="/generate_synthetic_data",
 )
-print(result["study_id"], result["files"])   # extracted design + generated SDTM file paths
+print(result["study_id"], result["files"], result["detected_nct"])
 ```
 
-It returns the extracted `ProtocolDesign` and the paths to the generated SDTM files as plain
-JSON — no Gradio UI objects.
+Ingestion precedence is **sample → `protocol_url` → `file_path`**. It returns the extracted
+`ProtocolDesign` and the paths to the generated SDTM files as plain JSON — no Gradio UI objects.
+An NCT id is **auto-detected** from the protocol text; when found, a read-only ClinicalTrials.gov
+cross-check is attached as `registry_crosscheck` (it never influences generation).
 
 ## 🚀 Quickstart (Docker)
 

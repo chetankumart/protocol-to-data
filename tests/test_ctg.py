@@ -73,8 +73,27 @@ def test_parse_baseline_missing_modules():
 
 # ---- app._render_crosscheck (read-only badge) -------------------------------------------
 
-def test_render_hint_when_no_nct():
-    assert "NCT ID" in app._render_crosscheck({"num_arms": 2}, "")  # no network hit
+def test_render_no_nct_message():
+    # No id detected → clean notice, no network hit.
+    assert "No Registry ID detected" in app._render_crosscheck({"num_arms": 2}, "")
+    assert "No Registry ID detected" in app._render_crosscheck({}, None)
+
+
+def test_detect_nct_found(monkeypatch):
+    monkeypatch.setattr(app, "load_protocol_text", lambda p: "... study NCT04303780 blah ...")
+    assert app._detect_nct("x.pdf") == "NCT04303780"
+
+
+def test_detect_nct_absent(monkeypatch):
+    monkeypatch.setattr(app, "load_protocol_text", lambda p: "a protocol with no registry id")
+    assert app._detect_nct("x.pdf") is None
+
+
+def test_detect_nct_read_error_is_safe(monkeypatch):
+    def boom(p):
+        raise OSError("unreadable")
+    monkeypatch.setattr(app, "load_protocol_text", boom)
+    assert app._detect_nct("x.pdf") is None  # best-effort — never raises
 
 
 def test_render_all_match(monkeypatch):

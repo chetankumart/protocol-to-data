@@ -10,9 +10,11 @@ browse the generated SDTM CSVs and the anomaly scorecard. Reuses the agent uncha
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import queue
+import re
 import sys
 import threading
 from pathlib import Path
@@ -27,8 +29,10 @@ from protocol_to_data.anomalies import (  # noqa: E402
     detect_anomalies, inject_anomalies, score_detections, scorecard_markdown,
 )
 from protocol_to_data import ctg_validator  # noqa: E402  — read-only registry cross-check (display only)
+from protocol_to_data.download import download_from_url  # noqa: E402  — "Ingest by URL" fallback
 from protocol_to_data import rbac  # noqa: E402  — RBAC stubs (not enforced; see rbac.py)
 from protocol_to_data.history import list_runs, load_run, run_label, save_run  # noqa: E402
+from protocol_to_data.ingest import load_protocol_text  # noqa: E402  — for zero-click NCT auto-detect
 from protocol_to_data.llm import reset_usage, usage_summary  # noqa: E402  — cost tracking
 from protocol_to_data.loop import run_loop  # noqa: E402
 
@@ -174,9 +178,25 @@ def _resolve_port(env: dict | None = None) -> int:
     return int(env.get("PORT") or env.get("GRADIO_SERVER_PORT") or "7860")
 
 
-def _crosscheck_hint() -> str:
-    return ("_Enter an NCT ID above and run to cross-check the extracted design against "
-            "ClinicalTrials.gov — **read-only**, never used to generate data._")
+_NCT_RE = re.compile(r"NCT\d{8}")
+
+_CROSSCHECK_IDLE = ("_Run a protocol — if its text contains an NCT ID, it's auto-validated "
+                    "against ClinicalTrials.gov here (read-only)._")
+_NO_NCT_MSG = ("**🏛️ Registry Cross-Check**\n\n"
+               "No Registry ID detected (Likely a pre-registration or private protocol).")
+
+
+def _detect_nct(protocol_path: str) -> str | None:
+    """Zero-click: scan the extracted protocol text for an NCT id (e.g. NCT04303780).
+
+    Best-effort ingestion-layer read — never fails the run. Returns the id or None.
+    """
+    try:
+        text = load_protocol_text(protocol_path)
+    except Exception:  # noqa: BLE001 — detection must never break generation
+        return None
+    m = _NCT_RE.search(text or "")
+    return m.group(0) if m else None
 
 
 def _phase_digits(p) -> str:
@@ -184,13 +204,14 @@ def _phase_digits(p) -> str:
     return "".join(ch for ch in str(p) if ch.isdigit() or ch == "/")
 
 
-def _render_crosscheck(extracted: dict, nct_id: str) -> str:
+def _render_crosscheck(extracted: dict, nct_id: str | None) -> str:
     """READ-ONLY registry badge: compare the extracted skeleton to ClinicalTrials.gov.
 
-    Purely for display — the CTG data is NEVER fed into SDTM generation. Returns Markdown.
+    Purely for display — CTG data is NEVER fed into SDTM generation. `nct_id` is auto-detected
+    from the protocol text; None → a clean "no registry id" notice.
     """
-    if not nct_id or not nct_id.strip():
-        return _crosscheck_hint()
+    if not nct_id:
+        return _NO_NCT_MSG
     reg = ctg_validator.fetch_ctg_baseline(nct_id)
     if "error" in reg:
         return f"⚠️ **Registry cross-check unavailable** — {reg['error']}"
@@ -225,23 +246,57 @@ def _build_marker(env: dict | None = None) -> str:
     return sha[:7] if sha else "local"
 
 
+@contextlib.contextmanager
+def _protocol_source(use_sample: bool, protocol_url: str, file_path):
+    """Resolve the ingestion source by strict precedence and yield a readable local path.
+
+    Precedence: (1) bundled sample → (2) URL (downloaded to a temp file) → (3) uploaded file →
+    (4) clear error. A temp file created from a URL is deleted on exit (``finally``), so we never
+    leak disk on the free cloud instance. `nct_id` is intentionally NOT a source here — it stays a
+    read-only cross-check applied after extraction.
+    """
+    tmp_path = None
+    try:
+        if use_sample:
+            yield str(SAMPLE)
+        elif protocol_url and protocol_url.strip():
+            tmp_path = download_from_url(protocol_url.strip())
+            yield tmp_path
+        elif file_path:
+            yield file_path.name if hasattr(file_path, "name") else str(file_path)
+        else:
+            raise ValueError(
+                "No protocol provided — upload a file, paste a URL, or tick 'Use bundled sample'."
+            )
+    finally:
+        if tmp_path:
+            with contextlib.suppress(OSError):
+                os.remove(tmp_path)
+
+
 def api_run(file_path: str, use_sample: bool = True, subjects: int = 40, seed: int = 42,
-            anomalies: int = 0, export_format: str = EXPORT_SDTM, nct_id: str = "") -> dict:
+            anomalies: int = 0, export_format: str = EXPORT_SDTM, protocol_url: str = "") -> dict:
     """Clean programmatic entry point (Gradio/MCP endpoint ``generate_synthetic_data``).
 
     Runs the protocol-to-data pipeline and returns ONLY the final artifacts as a JSON-serializable
     dict — the extracted ProtocolDesign and the paths to the generated SDTM files. No Gradio UI
     objects (Markdown / Dataframe / component updates) are returned.
 
-    Set ``use_sample=True`` to run the bundled CARDIO-HF sample; otherwise ``file_path`` must be a
-    server-readable protocol (PDF / HTML / txt). ``nct_id`` optionally attaches a read-only
-    ClinicalTrials.gov cross-check (it never influences generation).
+    Ingestion precedence: ``use_sample`` (bundled CARDIO-HF) → ``protocol_url`` (downloaded) →
+    ``file_path`` (server-readable protocol) → error. An NCT id is **auto-detected** from the
+    protocol text; if found, a read-only ClinicalTrials.gov cross-check is attached (it never
+    influences generation).
     """
-    path = str(SAMPLE) if (use_sample or not file_path) else file_path
     final_extras = None
-    for _narration, is_final, extras in execute(path, subjects, seed, anomalies):
-        if is_final:
-            final_extras = extras
+    detected_nct = None
+    try:
+        with _protocol_source(use_sample, protocol_url, file_path) as path:
+            detected_nct = _detect_nct(path)  # zero-click, read-only (never affects generation)
+            for _narration, is_final, extras in execute(path, subjects, seed, anomalies):
+                if is_final:
+                    final_extras = extras
+    except (ValueError, RuntimeError) as e:  # no input / bad URL / download failure
+        return {"status": "error", "message": str(e)}
     if not final_extras or not final_extras.get("output_dir"):
         return {"status": "error", "message": "Generation did not complete; check server logs."}
 
@@ -254,9 +309,10 @@ def api_run(file_path: str, use_sample: bool = True, subjects: int = 40, seed: i
         "domains": final_extras.get("domains", []),
         "files": [str(p) for p in sorted(out_dir.glob("*.csv"))],
         "design": design,
+        "detected_nct": detected_nct,
     }
-    if nct_id and nct_id.strip():
-        resp["registry_crosscheck"] = ctg_validator.fetch_ctg_baseline(nct_id)  # read-only
+    if detected_nct:
+        resp["registry_crosscheck"] = ctg_validator.fetch_ctg_baseline(detected_nct)  # read-only
     return resp
 
 
@@ -277,14 +333,14 @@ def build_ui():
             with gr.Column(scale=1):
                 file_in = gr.File(label="Protocol (PDF / HTML / .md / .txt)",
                                   file_types=[".pdf", ".html", ".htm", ".md", ".txt"])
+                url_in = gr.Textbox(label="Or paste a Protocol URL (PDF/HTML/Text)",
+                                    placeholder="https://...")
                 use_sample = gr.Checkbox(label="Use bundled CARDIO-HF sample", value=True)
                 subjects = gr.Slider(4, 100, value=40, step=1, label="Subjects")
                 seed = gr.Number(value=42, precision=0, label="Seed (reproducible)")
                 anomalies = gr.Slider(0, 5, value=5, step=1, label="Anomalies to inject + detect")
                 export_format = gr.Dropdown(label="Target Export Format", choices=EXPORT_FORMATS,
                                             value=EXPORT_SDTM, interactive=True)
-                nct_input = gr.Textbox(label="NCT ID (Optional - For Registry Cross-Check)",
-                                       placeholder="e.g. NCT04303780", value="")
                 run_btn = gr.Button("▶  Run the loop", variant="primary")
                 history_dd = gr.Dropdown(label="📁 Load a previous run", choices=_run_choices(),
                                          value=None, interactive=True)
@@ -296,7 +352,7 @@ def build_ui():
         with gr.Accordion("🧩 Extracted ProtocolDesign", open=False):
             design_code = gr.Code(language="json", label="design (post-repair)")
         with gr.Accordion("🏛️ Registry Cross-Check", open=True):
-            crosscheck_md = gr.Markdown(_crosscheck_hint())
+            crosscheck_md = gr.Markdown(_CROSSCHECK_IDLE)
         with gr.Accordion("🏭 Generated SDTM data", open=True):
             domain_dd = gr.Dropdown(label="Domain", choices=[], interactive=True)
             data_df = gr.Dataframe(label="Preview (first 200 rows)", interactive=False, wrap=True)
@@ -307,27 +363,32 @@ def build_ui():
         # the page (Render sets RENDER_GIT_COMMIT; 'local' off-platform).
         gr.Markdown(f"<sub>🧬 protocol-to-data · build `{_build_marker()}`</sub>")
 
-        def on_run(file, use_samp, subj, sd, anom, export_fmt, nct_id):
+        def on_run(file, use_samp, subj, sd, anom, export_fmt, protocol_url):
             rbac.require_write()  # RBAC injection point: running/generating is a write op (CDM)
             warning = _export_warning(export_fmt)  # EDC targets → roadmap notice, fall back to SDTM
-            path = str(SAMPLE) if (use_samp or not file) else (file.name if hasattr(file, "name") else file)
-            for text, final, extras in execute(path, subj, sd, anom):
-                if not final:
-                    yield {narration: warning + text}
-                else:
-                    domains = extras["domains"]
-                    yield {
-                        narration: warning + text,
-                        design_code: extras["design_json"],
-                        # Read-only registry badge — CTG data is display-only, never fed to generation.
-                        crosscheck_md: _render_crosscheck(extras.get("skeleton", {}), nct_id),
-                        domain_dd: gr.update(choices=domains, value=(domains[0] if domains else None)),
-                        out_dir_state: extras["output_dir"],
-                        scorecard: extras["scorecard"],
-                        data_df: _load_domain_csv(extras["output_dir"], domains[0] if domains else ""),
-                        history_dd: gr.update(choices=_run_choices()),  # surface the just-saved run
-                        usage_badge: extras["usage_badge"],
-                    }
+            # Ingestion precedence + temp-file cleanup handled by _protocol_source (sample → URL → file).
+            try:
+                with _protocol_source(use_samp, protocol_url, file) as path:
+                    nct = _detect_nct(path)  # zero-click, read-only (never affects generation)
+                    for text, final, extras in execute(path, subj, sd, anom):
+                        if not final:
+                            yield {narration: warning + text}
+                        else:
+                            domains = extras["domains"]
+                            yield {
+                                narration: warning + text,
+                                design_code: extras["design_json"],
+                                # Read-only registry badge — auto-detected NCT, display-only, never fed to generation.
+                                crosscheck_md: _render_crosscheck(extras.get("skeleton", {}), nct),
+                                domain_dd: gr.update(choices=domains, value=(domains[0] if domains else None)),
+                                out_dir_state: extras["output_dir"],
+                                scorecard: extras["scorecard"],
+                                data_df: _load_domain_csv(extras["output_dir"], domains[0] if domains else ""),
+                                history_dd: gr.update(choices=_run_choices()),  # surface the just-saved run
+                                usage_badge: extras["usage_badge"],
+                            }
+            except (ValueError, RuntimeError) as e:  # no input / bad URL / download failure
+                yield {narration: warning + f"❌  {e}"}
 
         def on_load_run(run_dir):
             rbac.require_read()  # RBAC injection point: restoring a run is read-only (Statistician-safe)
@@ -346,7 +407,8 @@ def build_ui():
 
         # UI event listeners are presentation-only — hide them from the public API docs
         # (api_name=False) so consumers see just the clean endpoint below, not UI-update signatures.
-        run_btn.click(on_run, [file_in, use_sample, subjects, seed, anomalies, export_format, nct_input],
+        run_btn.click(on_run,
+                      [file_in, use_sample, subjects, seed, anomalies, export_format, url_in],
                       [narration, design_code, crosscheck_md, domain_dd, out_dir_state, scorecard,
                        data_df, history_dd, usage_badge], api_name=False)
         history_dd.change(on_load_run, [history_dd],
