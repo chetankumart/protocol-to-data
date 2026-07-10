@@ -14,9 +14,11 @@
 - Real EDC ODM-XML export (Rave/Veeva). The UI surfaces these as v2-roadmap targets that fall
   back to SDTM — the value delivered today is Databricks-ready SDTM Parquet.
 
-> **Delivered beyond the original plan:** a thin **Gradio web UI** (`app.py`, was a stretch
-> goal), an **MCP server** (`mcp_server.py`), opt-in **PHI/PII sanitization** (`sanitize.py`),
-> and a free **cloud deployment** (Render, `render.yaml`) — see the sections below.
+> **Delivered beyond the original plan:** a two-tab **Gradio web UI** (`app.py`, was a stretch
+> goal) with a **Data Copilot** (DuckDB chat + Plotly charts), a **Registry Cross-Check**
+> (ClinicalTrials.gov, read-only), **URL ingestion**, a clean **HTTP API** + **MCP server**, opt-in
+> **PHI/PII sanitization**, and a free **cloud deployment** (Render, `render.yaml`) with a
+> **CI-gated deploy** pipeline — see the sections below.
 
 ## `ProtocolDesign` (the contract)
 
@@ -72,6 +74,30 @@ A FastMCP server exposes the loop as Model Context Protocol tools for Claude Des
 
 `pip install ".[mcp]"` then `python mcp_server.py` (stdio transport).
 
+### Clean HTTP API (`generate_synthetic_data`)
+The web app exposes exactly one documented endpoint via `gr.api` — `generate_synthetic_data`
+(UI-update functions are hidden with `api_name=False`). It runs the pipeline and returns only
+final artifacts (`study_id`, `design`, generated file paths, optional `registry_crosscheck`) as
+plain JSON. Callable with `gradio_client` (also surfaced as an MCP tool by `gr.api`).
+
+### Ingest by URL (`download.py`)
+Mobile-friendly ingestion: paste a public protocol URL instead of uploading. `download_from_url`
+fetches to a secure temp file (curl_cffi browser-TLS + urllib fallback, 50 MB cap); precedence is
+**sample → URL → file → error**, and any URL temp file is deleted in a `finally` block (no disk
+leak on the free tier).
+
+### Registry Cross-Check (`ctg_validator.py`)
+Zero-click: an NCT id is regex-detected from the extracted text, and the design's phase / arms /
+enrollment are compared **read-only** against ClinicalTrials.gov v2 (fetched via curl_cffi to pass
+the registry WAF). Display-only — it never feeds SDTM generation.
+
+### Data Copilot (`copilot.py`)
+Chat + charts over the generated data, memory-safely. Claude turns a question + the CSV schema
+into a **DuckDB** query that runs directly on the on-disk CSVs (`read_csv_auto`, streamed;
+`memory_limit='256MB'`; no full-file pandas loads). Chart requests (bar/pie/line/scatter/histogram)
+render an interactive Plotly figure via `gr.Plot`; otherwise Claude explains the small result.
+Demo guardrails: ≤150 chars, 3 queries/run (resets on a new run), graceful SQL-error message.
+
 ### PHI/PII sanitization (`sanitize.py`)
 Opt-in via `PTD_SANITIZE_PHI=1` — scrubs identifiers **before** any text reaches Claude:
 deterministic regex (email, phone, SSN, MRN, URL) always runs; `pip install ".[phi]"` adds
@@ -111,8 +137,11 @@ per-run token + `$` cost accounting · Target Export Format selector (SDTM defau
 - `gradio` (web UI, `app.py`)
 - argparse (CLI)
 - `pytest` + `ruff` (tests + lint, CI-enforced)
+- `duckdb` (memory-safe on-disk SQL for the Data Copilot), `plotly` (interactive charts),
+  `curl_cffi` (browser-TLS fetch for CTG / URL ingestion)
 - Optional extras: `mcp` (`pip install ".[mcp]"` — MCP server), `presidio-analyzer`/`presidio-anonymizer` (`.[phi]` — PHI NER)
-- Packaging: `Dockerfile` + `docker-compose.yml` (container), `render.yaml` (free cloud deploy)
+- Packaging: `Dockerfile` + `docker-compose.yml` (container), `render.yaml` (free cloud deploy),
+  `.github/workflows/ci.yml` (lint + test + CI-gated Render deploy)
 
 ## Model usage guidance
 

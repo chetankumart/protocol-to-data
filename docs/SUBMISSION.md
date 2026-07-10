@@ -174,7 +174,21 @@ lean, but showing the shape of production:
   `docker-compose.yml`, and a `render.yaml` blueprint that hosts the same image on Render's free
   tier — **live at https://protocol-to-data.onrender.com** (verified end-to-end in the cloud:
   self-repair + 5/5 anomalies + $-cost). `app.py` honors a platform-assigned `$PORT`
-  (`PORT > GRADIO_SERVER_PORT > 7860`), so Railway / Fly / Cloud Run run it unchanged.
+  (`PORT > GRADIO_SERVER_PORT > 7860`), so Railway / Fly / Cloud Run run it unchanged. A
+  **CI-gated deploy** (`.github/workflows/ci.yml`) ships only green builds via a Render deploy hook,
+  and the UI footer shows the live build SHA for verifiable deploys.
+- **Data Copilot (natural-language analytics).** A 💬 chat tab over the generated dataset: Claude
+  writes a **DuckDB** query that runs *directly on the on-disk CSVs* (streamed, `memory_limit=256MB`
+  — no full-file pandas loads), so it's safe on the 512 MB tier; ask for a chart and it renders an
+  interactive **Plotly** figure in-chat. Sandboxed for the demo (≤150 chars, 3 queries/run, SQL
+  safety net). `copilot.py` — read-only over the produced data; it never touches generation.
+- **Registry Cross-Check (verify-before-trust).** An NCT id is **auto-detected** from the protocol
+  text and the extracted design (phase / arms / enrollment) is compared, **read-only**, against
+  **ClinicalTrials.gov** — anchoring the LLM extraction to public government ground truth without
+  ever feeding the registry into generation (`ctg_validator.py`).
+- **Ingest by file *or* URL + clean API.** Mobile-friendly URL ingestion (`download.py`, precedence
+  sample → URL → file, temp files auto-cleaned), and one typed HTTP endpoint
+  **`generate_synthetic_data`** (`gr.api`; UI internals hidden) callable via `gradio_client`.
 
 ## Honest limitations & what's next
 

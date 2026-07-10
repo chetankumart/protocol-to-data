@@ -3,14 +3,14 @@
 Full E2E coverage for CLI, Web UI, generation, the agentic loop, and enterprise features —
 including edge, boundary, malformed, and error cases.
 
-- **Automated:** `88` offline tests (no API key — LLM calls mocked). Run: `pytest -q`.
+- **Automated:** `134` offline tests (no API key — LLM calls mocked). Run: `pytest -q`.
 - **Lint:** `ruff check .` (enforced in CI on every push/PR).
 - **Legend:** ✅ automated · 👤 manual · 🔑 needs a live `ANTHROPIC_API_KEY`.
 
 Run the automated suite anywhere:
 ```bash
 pip install -r requirements.txt ruff
-ruff check . && pytest -q      # expect: All checks passed! · 88 passed
+ruff check . && pytest -q      # expect: All checks passed! · 134 passed
 ```
 
 ---
@@ -109,6 +109,26 @@ ruff check . && pytest -q      # expect: All checks passed! · 88 passed
 | MCP-02 | Generate + validate via MCP | deterministic generation + validation callable without a key | ✅ (`test_mcp`) |
 | MCP-03 | Register in Claude Desktop | tool calls succeed from an MCP client | 👤 (`docs/DEPLOY.md` §2) |
 
+## 7b. Data Copilot · Registry Cross-Check · URL ingestion · API
+
+| ID | Case | Expected | Cov |
+|----|------|----------|-----|
+| COP-01 | NL → text answer | schema-only SQL, on-disk DuckDB, result → concise answer | ✅ (`test_copilot`) |
+| COP-02 | NL → chart | "bar chart of subjects per arm" → a Plotly `go.Figure` (bar/pie/line/scatter/histogram) | ✅ (`test_copilot`) |
+| COP-03 | Memory cap | DuckDB `memory_limit` pinned to 256 MiB; no full-file pandas load | ✅ (`test_copilot`) |
+| COP-04 | Invalid SQL safety net | bad/unsafe SQL → graceful demo message, never a crash | ✅ (`test_copilot`) |
+| COP-05 | Demo guardrails | >150 chars blocked; ≥3 user turns blocked; both before any LLM call | ✅ (`test_copilot`) |
+| COP-06 | Needs data | chat before a run → "generate a dataset first" | ✅ (`test_copilot`) |
+| CTG-01 | Zero-click NCT detect | `NCT\d{8}` regex-detected from extracted text | ✅ (`test_ctg`) |
+| CTG-02 | Registry cross-check render | Extracted vs CTG (phase/arms/enrollment) with Match/Differs; read-only | ✅ (`test_ctg`) |
+| CTG-03 | Fetch failure / 404 / bad id | graceful `{"error": …}` / "unavailable", never raises | ✅ (`test_ctg`) |
+| URL-01 | Download to temp file | `download_from_url` → abs temp path; suffix from content-type/URL | ✅ (`test_download`) |
+| URL-02 | Ingestion precedence + cleanup | sample → URL → file → error; URL temp file removed in `finally` | ✅ (`test_api`, `test_download`) |
+| URL-03 | Bad scheme / fetch error | `ValueError` / `RuntimeError`, surfaced not crashed | ✅ (`test_download`) |
+| API-01 | Clean endpoint surface | only `generate_synthetic_data` documented (UI events `api_name=False`) | ✅ (`test_api`) 👤 (`view_api`) |
+| API-02 | Clean payload | returns `study_id`/`design`/file paths as pure JSON; no Gradio objects | ✅ (`test_api`) |
+| API-03 | `build_ui()` constructs | tabs + ChatInterface + `gr.api` + CTA CSS build without error | ✅ (`test_api`) |
+
 ## 8. Edge / boundary / error cases
 
 | ID | Case | Expected | Cov |
@@ -132,15 +152,20 @@ ruff check . && pytest -q      # expect: All checks passed! · 88 passed
 
 ## 9. Manual pre-submission smoke (do once before submitting)
 
-1. 👤 Fresh clone → `pip install -r requirements.txt` → `ruff check . && pytest -q` → **All green, 88 passed**.
+1. 👤 Fresh clone → `pip install -r requirements.txt` → `ruff check . && pytest -q` → **All green, 134 passed**.
 2. 🔑 `ptd run examples/sample_protocol.md --seed 42 --anomalies 5` → PASS + 5/5 + cost line.
 3. 🔑 `python app.py` → run sample in the browser → narration + data + scorecard + cost badge.
 4. 👤 `docker compose up` (or `podman-compose up`) → `localhost:7860` serves.
 5. 👤 Open **https://protocol-to-data.onrender.com** → run the sample end-to-end in the cloud.
-6. 👤 Confirm README screenshot + Mermaid diagrams render on the GitHub page.
+6. 🔑 In the **💬 Data Copilot** tab after a run: ask a text question ("subjects per arm?") and a
+   chart request ("bar chart of subjects per arm") → concise answer + an interactive Plotly chart.
+7. 👤 Paste a protocol **URL** (uncheck the sample) → extracts; the **🏛️ Registry Cross-Check**
+   auto-populates if the protocol contains an NCT id.
+8. 👤 Confirm README screenshot + Mermaid diagrams render on the GitHub page, and the link-preview
+   card (share the URL) shows the project title + screenshot.
 
 ---
 
 ### Coverage summary
-`88/88` automated tests green · `ruff` clean · CI enforced. Every edge/boundary/error case
+`134/134` automated tests green · `ruff` clean · CI enforced. Every edge/boundary/error case
 above is either covered by an automated test or listed as a one-time manual check.

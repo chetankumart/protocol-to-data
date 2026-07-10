@@ -53,11 +53,21 @@ Hybrid AI by design — **Claude reasons, deterministic Python generates**:
 - 🔗 **Referential + temporal integrity** — orphan `USUBJID` dropped and asserted; `VISIT↔VISITNUM`
   asserted 1:1 across VS/LB/QS/RS — a verify-before-write gate.
 - 🕵️ **Anomaly loop** — a second Claude agent finds and explains injected defects, scored N/N.
+- 💬 **Data Copilot** — chat with the generated SDTM data in plain English (and **plot it**:
+  bar / pie / line / scatter). Claude writes a **DuckDB** query that runs *directly on the on-disk
+  CSVs* (streamed, never loaded into pandas), so it stays within the 512 MB cloud tier. Sandboxed
+  for the demo (≤150 chars, 3 queries/run, SQL safety net).
+- 🏛️ **Registry Cross-Check** — an NCT id is **auto-detected** from the protocol text and the
+  extracted design is compared, read-only, against **ClinicalTrials.gov** (phase / arms /
+  enrollment). Verify-before-trust; it never feeds generation.
+- 📱 **Ingest by file or URL** — paste a public protocol URL (mobile-friendly) or upload a file;
+  precedence sample → URL → file, with downloaded temp files cleaned up after extraction.
 - ⚡ **Semantic caching** — SHA-256-keyed extraction cache; an identical protocol never pays for
   extraction twice ($0 on a cache hit).
 - 🪙 **Cost observability** — live per-run token + `$` tracking in the UI and CLI.
-- 🔌 **MCP server** — `mcp_server.py` exposes extract / generate / validate as Model Context
-  Protocol tools for Claude Desktop or any MCP client (`pip install ".[mcp]"`).
+- 🔌 **MCP server + clean API** — `mcp_server.py` exposes extract / generate / validate as Model
+  Context Protocol tools; the web app also exposes one typed HTTP endpoint,
+  `generate_synthetic_data` (UI-internals hidden), callable via `gradio_client`.
 - 🔒 **PHI/PII sanitization** — opt-in (`PTD_SANITIZE_PHI=1`): deterministic regex + optional
   Presidio NER scrub the text **before** it reaches the LLM.
 - 🗂️ **Run history · RBAC-aware · EDC-target-aware · Dockerized · CI-guarded · cloud-deployed** —
@@ -94,9 +104,12 @@ Prefer a browser? A thin Gradio front-end wraps the same loop:
 python app.py           # then open http://127.0.0.1:7860
 ```
 
-Upload a protocol (or use the bundled sample), set subjects/seed/anomalies, and watch the
-extract → generate → validate → **repair** loop stream live, then browse the generated SDTM
-CSVs and the anomaly scorecard. The UI reuses `run_loop` unchanged — it's presentation only.
+The UI has two tabs. **⚙️ Pipeline** — upload a protocol *or paste a URL* (or use the bundled
+sample), set subjects/seed/anomalies, and watch the extract → generate → validate → **repair**
+loop stream live, then browse the generated SDTM CSVs, the 🏛️ Registry Cross-Check, and the
+anomaly scorecard. **💬 Data Copilot** — chat with the generated data and ask for charts. The UI
+reuses `run_loop` unchanged (presentation only) and is **live at
+[protocol-to-data.onrender.com](https://protocol-to-data.onrender.com)**.
 
 ![protocol-to-data web UI — the narrated loop shows Claude extracting the design, hitting a
 validation failure (planned domain EG has no data) and self-repairing to PASS, with the live
@@ -126,6 +139,22 @@ Ingestion precedence is **sample → `protocol_url` → `file_path`**. It return
 `ProtocolDesign` and the paths to the generated SDTM files as plain JSON — no Gradio UI objects.
 An NCT id is **auto-detected** from the protocol text; when found, a read-only ClinicalTrials.gov
 cross-check is attached as `registry_crosscheck` (it never influences generation).
+
+## 💬 Data Copilot (chat + charts)
+
+After a run, switch to the **💬 Data Copilot** tab and ask questions about the generated dataset
+in plain English. Claude writes a **DuckDB** SQL query that runs *directly against the on-disk
+CSVs* (columnar, streamed — never a full-file load), so it's safe on a 512 MB instance; ask for a
+chart and it renders an interactive **Plotly** figure right in the chat.
+
+```
+How many subjects are in each arm?     → text answer
+Bar chart of subjects per arm          → interactive bar chart
+Pie chart of sex                       → interactive pie chart
+```
+
+Demo-sandboxed: ≤150 characters, 3 questions per run (a new run resets it), and any invalid SQL
+degrades to a friendly message — never a crash.
 
 ## 🚀 Quickstart (Docker)
 
@@ -242,7 +271,7 @@ In short:
 ```bash
 pip install -r requirements.txt ruff pytest
 ruff check .          # → All checks passed!
-pytest -q             # → 88 passed  (offline; no API key needed)
+pytest -q             # → 134 passed  (offline; no API key needed)
 ```
 
 See **[`CONTRIBUTING.md`](CONTRIBUTING.md)** for the full guidelines.

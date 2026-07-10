@@ -30,6 +30,7 @@ flowchart TD
 | Module | Responsibility | Claude? |
 |--------|----------------|---------|
 | `src/protocol_to_data/ingest.py` | Load pdf/html/md/txt → normalized text (PHI-sanitizer injection point) | no |
+| `src/protocol_to_data/download.py` | Fetch a remote protocol URL → secure temp file (curl_cffi browser-TLS + urllib fallback); caller cleans up | no |
 | `src/protocol_to_data/sanitize.py` | Opt-in PHI/PII scrub (`PTD_SANITIZE_PHI=1`): regex + optional Presidio NER, before Claude sees text | no |
 | `src/protocol_to_data/extract.py` | Text → `ProtocolDesign`, with SHA-256 semantic cache + defensive JSON parsing | **yes** |
 | `src/protocol_to_data/schemas.py` | Typed models (`ProtocolDesign`, `Arm`, `Visit`, `Endpoint`, `DomainPlan`) | no |
@@ -40,8 +41,10 @@ flowchart TD
 | `src/protocol_to_data/llm.py` | Claude API wrapper — model routing, structured output, token/cost tracking | **yes** |
 | `src/protocol_to_data/history.py` | Snapshot each run → `runs/<timestamp>/` for restore | no |
 | `src/protocol_to_data/rbac.py` | RBAC injection-point stubs (Clinical Data Manager write / Statistician read) | no |
+| `src/protocol_to_data/ctg_validator.py` | Read-only ClinicalTrials.gov v2 fetch for the Registry Cross-Check (phase / arms / enrollment); display-only, never feeds generation | no |
+| `src/protocol_to_data/copilot.py` | Data Copilot — NL→DuckDB-SQL over the on-disk CSVs (memory-safe) + result→NL answer or a Plotly chart | **yes (SQL + answer)** |
 | `cli.py` | `ptd run/extract/generate/validate/anomalies` | no |
-| `app.py` | Gradio web UI — upload → live narrated loop → data browser + scorecard + cost badge | no |
+| `app.py` | Gradio web UI (⚙️ Pipeline + 💬 Data Copilot tabs); zero-click NCT cross-check; clean `generate_synthetic_data` API endpoint; link-preview + `$PORT` handling | no |
 | `mcp_server.py` | FastMCP server exposing `extract_protocol_design` / `generate_sdtm_dataset` / `validate_sdtm_dataset` as MCP tools | **yes (extract)** |
 
 ## Surfaces & deployment
@@ -74,6 +77,21 @@ flowchart LR
   `$PORT` (precedence `PORT > GRADIO_SERVER_PORT > 7860`; see `_resolve_host` / `_resolve_port`),
   so it also runs unchanged on Railway / Fly / Cloud Run. `ANTHROPIC_API_KEY` is injected as a
   host secret, never baked into the image. Full guide: [`DEPLOY.md`](DEPLOY.md).
+
+## Post-generation surfaces (read-only over the produced data)
+
+Two subsystems sit *after* the loop and never influence generation:
+
+- **Data Copilot (`copilot.py`).** A memory-safe NL analytics layer: Claude turns a question +
+  the CSV schema into a **DuckDB** SQL query, which runs **directly on the on-disk CSVs**
+  (`read_csv_auto`, streamed — never a `pd.read_parquet`/full-file load), capped at
+  `memory_limit='256MB'`. A chart request builds a Plotly figure from the small (≤50-row) result;
+  otherwise the result snippet goes back to Claude for a concise answer. Demo guardrails
+  (≤150 chars, 3 queries/run, SQL-error safety net) live in `app.py`'s `copilot_respond`.
+- **Registry Cross-Check (`ctg_validator.py`).** An NCT id is regex-detected from the extracted
+  protocol text; the extracted design's phase / arm-count / enrollment are compared, **read-only**,
+  against ClinicalTrials.gov v2 (fetched via `curl_cffi` to clear the registry's TLS-fingerprint
+  WAF). A "verify before trust" badge — CTG data is display-only and never fed to generation.
 
 ## Data contracts
 

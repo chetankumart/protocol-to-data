@@ -94,6 +94,15 @@ Also: **warm the cache** with one throwaway run so the recorded run is faster, a
 > docetaxel 75 per meter-squared every three weeks. Fully synthetic, reproducible with a seed,
 > zero PHI — from a 179-page PDF to analyzable, clinically-coherent data, driven by Claude."
 
+## Bonus beat — Data Copilot (optional, if you have ~20s)
+**[SCREEN]** Switch to the **💬 Data Copilot** tab. Type `bar chart of subjects per arm`.
+> "And you can just *talk* to the data. Claude writes a DuckDB query that runs directly on the
+> generated files — memory-safe — and here it plots it. No SQL, no export. From protocol PDF to a
+> chart, in one app."
+
+*(Also show the 🏛️ Registry Cross-Check panel: "it even auto-detected the NCT id and checked our
+extraction against ClinicalTrials.gov — the phase and arms match.")*
+
 ---
 
 # Fallback: Cardiology (CARDIO-HF sample) — simpler, lower-risk
