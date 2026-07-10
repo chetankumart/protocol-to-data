@@ -339,6 +339,67 @@ _CTA_CSS = """
 #main_run_btn:hover { transform: scale(1.02); }
 """
 
+# Link-preview identity. Gradio hard-codes default OG/social tags ("Gradio" + a cartoon) that a
+# launch(head=...) append can't override (duplicate tags → the first, Gradio's, wins in scrapers).
+# _SocialTagsMiddleware rewrites them in the ROOT html only, so WhatsApp/Slack/etc. show the project.
+_OG_IMAGE = "https://raw.githubusercontent.com/chetankumart/protocol-to-data/main/docs/img/ui_demo.png"
+_OG_DESC = ("Turn a clinical trial protocol into an analyzable synthetic SDTM dataset — one agentic "
+            "loop, driven by Claude. Then chat with the data.")
+_FAVICON_SVG = ("data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 "
+                "viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧬</text></svg>")
+_OG_REPLACEMENTS = [
+    (b'content="Gradio"', b'content="protocol-to-data"'),                  # og:title + twitter:title
+    (b'content="Click to try out the app!"', f'content="{_OG_DESC}"'.encode()),  # descriptions
+    (b'<meta property="og:image" content="" />',
+     f'<meta property="og:image" content="{_OG_IMAGE}" />'.encode()),
+    (b'<meta property="og:url" content="https://gradio.app/" />',
+     b'<meta property="og:url" content="https://protocol-to-data.onrender.com" />'),
+    (b'<meta property="og:url" content="{url}" />',
+     b'<meta property="og:url" content="https://protocol-to-data.onrender.com" />'),
+    (b"</head>",
+     (f'<meta name="twitter:image" content="{_OG_IMAGE}" />'
+      f'<link rel="icon" type="image/svg+xml" href="{_FAVICON_SVG}" /></head>').encode()),
+]
+
+
+class _SocialTagsMiddleware:
+    """ASGI middleware — rewrite Gradio's default social/OG tags in the root ('/') HTML only.
+
+    Every other path (including the queue's SSE streams and file routes) is passed straight through
+    untouched, so live narration and chat streaming are unaffected.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") != "http" or scope.get("path") != "/":
+            await self.app(scope, receive, send)
+            return
+        start = {}
+        chunks: list[bytes] = []
+
+        async def _send(message):
+            if message["type"] == "http.response.start":
+                start["msg"] = message
+            elif message["type"] == "http.response.body":
+                chunks.append(message.get("body", b""))
+                if message.get("more_body"):
+                    return
+                body = b"".join(chunks)
+                headers = dict(start["msg"].get("headers", []))
+                if b"text/html" in headers.get(b"content-type", b"") \
+                        and b"content-encoding" not in headers:
+                    for old, new in _OG_REPLACEMENTS:
+                        body = body.replace(old, new)
+                out = [(k, v) for k, v in start["msg"]["headers"] if k.lower() != b"content-length"]
+                out.append((b"content-length", str(len(body)).encode()))
+                await send({"type": "http.response.start",
+                            "status": start["msg"]["status"], "headers": out})
+                await send({"type": "http.response.body", "body": body})
+
+        await self.app(scope, receive, _send)
+
 
 # Demo guardrails on the Data Copilot — protect the 512MB instance + API budget.
 _COPILOT_MAX_CHARS = 150
@@ -515,8 +576,12 @@ def build_ui():
 if __name__ == "__main__":
     import gradio as gr
 
+    from starlette.middleware import Middleware
+
     build_ui().queue().launch(
         theme=gr.themes.Soft(),
         server_name=_resolve_host(),   # 0.0.0.0 on Spaces/containers, 127.0.0.1 locally
         server_port=_resolve_port(),   # honors a platform-assigned $PORT (Render/Fly/…)
+        # Rewrite Gradio's default link-preview tags → project title/description/image + 🧬 favicon.
+        app_kwargs={"middleware": [Middleware(_SocialTagsMiddleware)]},
     )
