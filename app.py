@@ -434,7 +434,7 @@ def build_ui():
                     "tab first._\n\n"
                     "> **Demo Mode: Limited to 3 queries per run. Max 150 characters.**"
                 )
-                gr.ChatInterface(
+                chat = gr.ChatInterface(
                     copilot_respond,
                     additional_inputs=[out_dir_state],
                     api_name=False,  # keep the public API surface to just generate_synthetic_data
@@ -492,6 +492,10 @@ def build_ui():
                       [file_in, use_sample, subjects, seed, anomalies, export_format, url_in],
                       [narration, design_code, crosscheck_md, domain_dd, out_dir_state, scorecard,
                        data_df, history_dd, usage_badge], api_name=False)
+        # A new run resets the Copilot session: clear BOTH the visible chatbot and ChatInterface's
+        # internal chatbot_state (the history the 3-query counter is derived from) so
+        # "run a new protocol to reset the Copilot" is literally true.
+        run_btn.click(lambda: ([], []), None, [chat.chatbot, chat.chatbot_state], api_name=False)
         history_dd.change(on_load_run, [history_dd],
                           [narration, design_code, domain_dd, out_dir_state, scorecard, data_df],
                           api_name=False)
