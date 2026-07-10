@@ -352,6 +352,12 @@ _OG_REPLACEMENTS = [
     (b'content="Click to try out the app!"', f'content="{_OG_DESC}"'.encode()),  # descriptions
     (b'<meta property="og:image" content="" />',
      f'<meta property="og:image" content="{_OG_IMAGE}" />'.encode()),
+    (b'<meta name="twitter:image" content="" />',
+     f'<meta name="twitter:image" content="{_OG_IMAGE}" />'.encode()),
+    # Gradio's default website header collage (the "Groot / X-ray / 3D model" image) — point it
+    # at our screenshot wherever it appears (og/twitter:image:src / link image_src).
+    (b"https://raw.githubusercontent.com/gradio-app/gradio/main/js/_website/src/lib/assets/"
+     b"img/header-image.jpg", _OG_IMAGE.encode()),
     (b'<meta property="og:url" content="https://gradio.app/" />',
      b'<meta property="og:url" content="https://protocol-to-data.onrender.com" />'),
     (b'<meta property="og:url" content="{url}" />',
