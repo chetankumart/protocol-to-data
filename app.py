@@ -366,7 +366,11 @@ def copilot_respond(message: str, history, output_dir: str) -> str:
     if _user_turn_count(history) >= _COPILOT_MAX_QUERIES:
         return ("🛑 Demo Limit Reached: You have used your 3 queries for this session. Please run "
                 "a new protocol extraction to reset the Copilot.")
-    return copilot.answer(message, output_dir or "")
+    result = copilot.answer(message, output_dir or "")
+    if isinstance(result, str):
+        return result
+    import gradio as gr
+    return gr.Plot(result)  # a Plotly figure → interactive chart rendered in the chat bubble
 
 
 def build_ui():
@@ -430,8 +434,9 @@ def build_ui():
                 gr.Markdown(
                     "**Chat with your generated SDTM datasets.** Ask in plain English — a DuckDB "
                     "query runs directly against the on-disk data (memory-safe, no full-file "
-                    "loads), then Claude explains the result. _Run a protocol in the ⚙️ Pipeline "
-                    "tab first._\n\n"
+                    "loads), then Claude explains the result. Or **ask for a chart** — e.g. "
+                    "_'bar chart of subjects per arm'_, _'pie chart of sex'_ — to see it plotted. "
+                    "_Run a protocol in the ⚙️ Pipeline tab first._\n\n"
                     "> **Demo Mode: Limited to 3 queries per run. Max 150 characters.**"
                 )
                 chat = gr.ChatInterface(

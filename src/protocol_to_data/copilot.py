@@ -10,6 +10,9 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import plotly.express as px
+import plotly.graph_objects as go
+
 from . import llm
 
 # Hard cap so DuckDB can't misdetect a constrained container's RAM and over-allocate.
@@ -20,7 +23,9 @@ _RESULT_ROW_CAP = 50  # bound the result snippet handed back to the LLM
 _SQL_SYSTEM = (
     "You are a clinical data copilot. Write a single valid DuckDB SQL query to answer the user's "
     "question using the provided table schemas (SDTM domains). Return ONLY the SQL string — no "
-    "prose, no markdown fences, no explanation. Use only the listed tables and columns."
+    "prose, no markdown fences, no explanation. Use only the listed tables and columns. If the "
+    "question asks for a chart/plot, return exactly the columns to plot: the category/x column "
+    "first, then the numeric value column."
 )
 _ANSWER_SYSTEM = "You are a clinical data copilot. Answer concisely and accurately."
 
@@ -82,8 +87,54 @@ def _rows_to_markdown(cols, rows, max_rows: int = 20) -> str:
     return "\n".join(out)
 
 
-def answer(query: str, output_dir: str) -> str:
-    """Answer a natural-language question over the generated SDTM data. Never raises to the UI."""
+def _wants_chart(query: str) -> str | None:
+    """Detect a chart request + its type from the message; None → plain-text answer."""
+    q = query.lower()
+    if not any(k in q for k in ("chart", "plot", "graph", "visuali", "pie", "scatter",
+                                "histogram", "trend")):
+        return None
+    if "pie" in q:
+        return "pie"
+    if "scatter" in q:
+        return "scatter"
+    if "line" in q or "trend" in q:
+        return "line"
+    if "histogram" in q or "distribution" in q:
+        return "histogram"
+    return "bar"  # sensible default for "chart / plot / graph / bar"
+
+
+def _build_chart(chart_type: str, cols: list, rows: list, title: str) -> go.Figure | None:
+    """Build a Plotly figure from the SMALL query result (≤ result cap). None if not chartable.
+
+    Operates on the already-bounded result set (never the source files), so it stays memory-safe.
+    """
+    if not rows or not cols:
+        return None
+    import pandas as pd
+    df = pd.DataFrame(rows, columns=cols)  # ≤ _RESULT_ROW_CAP rows — tiny, not a file load
+    x = cols[0]
+    y = cols[1] if len(cols) > 1 else None
+    try:
+        if chart_type == "pie" and y is not None:
+            fig = px.pie(df, names=x, values=y)
+        elif chart_type == "scatter" and y is not None:
+            fig = px.scatter(df, x=x, y=y)
+        elif chart_type == "line" and y is not None:
+            fig = px.line(df, x=x, y=y, markers=True)
+        elif chart_type == "histogram" or y is None:
+            fig = px.histogram(df, x=x)
+        else:
+            fig = px.bar(df, x=x, y=y)
+    except Exception:  # noqa: BLE001 — unchartable result shape → caller falls back to text
+        return None
+    fig.update_layout(title=str(title)[:90], margin=dict(l=20, r=20, t=50, b=20))
+    return fig
+
+
+def answer(query: str, output_dir: str) -> "str | go.Figure":
+    """Answer a question over the generated SDTM data — a Plotly figure for chart requests,
+    otherwise a markdown string. Never raises to the UI."""
     if not query or not query.strip():
         return "Ask me something about the data (e.g. 'How many subjects are in each arm?')."
     if not output_dir or not Path(output_dir).exists():
@@ -106,6 +157,11 @@ def answer(query: str, output_dir: str) -> str:
                 cols = [d[0] for d in cur.description]
             except Exception:  # noqa: BLE001 — invalid/unsafe SQL → graceful demo message
                 return _SQL_GUARDRAIL_MSG
+            chart_type = _wants_chart(query)
+            if chart_type:
+                fig = _build_chart(chart_type, cols, rows, query)
+                if fig is not None:
+                    return fig  # rendered as an interactive gr.Plot in the chat (no 2nd LLM call)
             snippet = _rows_to_markdown(cols, rows)
             return llm.complete(
                 f"Question: {query}\n\nSQL:\n{sql}\n\nResult (first {_RESULT_ROW_CAP} rows):\n"

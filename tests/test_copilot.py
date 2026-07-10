@@ -95,3 +95,42 @@ def test_connect_pins_memory_limit(tmp_path):
 def test_sql_only_strips_fences_and_semicolons():
     assert copilot._sql_only("```sql\nSELECT 1;\n```") == "SELECT 1"
     assert copilot._sql_only("SELECT 1") == "SELECT 1"
+
+
+# ---- chart generation (wired into the Copilot) ------------------------------------------
+
+def test_wants_chart_detection():
+    assert copilot._wants_chart("show a bar chart of arms") == "bar"
+    assert copilot._wants_chart("pie chart of sex") == "pie"
+    assert copilot._wants_chart("scatter plot of age vs score") == "scatter"
+    assert copilot._wants_chart("line chart of the trend") == "line"
+    assert copilot._wants_chart("how many subjects per arm?") is None      # no chart intent
+    assert copilot._wants_chart("baseline characteristics table") is None  # 'line' in 'baseline'
+
+
+def test_build_chart_returns_figure_or_none():
+    import plotly.graph_objects as go
+    fig = copilot._build_chart("bar", ["ARM", "n"], [("A", 20), ("B", 20)], "subjects per arm")
+    assert isinstance(fig, go.Figure)
+    assert copilot._build_chart("bar", [], [], "x") is None  # empty result → not chartable
+
+
+def test_answer_returns_figure_for_chart_query(tmp_path, monkeypatch):
+    import plotly.graph_objects as go
+    calls = []
+
+    def fake_complete(p, *, model=None, max_tokens=4096, system=None):
+        calls.append(1)
+        return "SELECT ARM, COUNT(*) AS n FROM dm GROUP BY ARM"
+    monkeypatch.setattr(copilot.llm, "complete", fake_complete)
+    result = copilot.answer("show a bar chart of subjects per arm", _dm(tmp_path))
+    assert isinstance(result, go.Figure)
+    assert len(calls) == 1  # chart path skips the text-answer LLM call
+
+
+def test_copilot_respond_wraps_figure_in_gr_plot(monkeypatch):
+    import gradio as gr
+    import plotly.graph_objects as go
+    monkeypatch.setattr(app.copilot, "answer", lambda msg, od: go.Figure())
+    out = app.copilot_respond("bar chart please", [], "/dir")
+    assert isinstance(out, gr.Plot)
