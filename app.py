@@ -28,6 +28,7 @@ import cli  # noqa: E402  — reuse its .env loader
 from protocol_to_data.anomalies import (  # noqa: E402
     detect_anomalies, inject_anomalies, score_detections, scorecard_markdown,
 )
+from protocol_to_data import copilot  # noqa: E402  — DuckDB-backed Data Copilot (memory-safe chat)
 from protocol_to_data import ctg_validator  # noqa: E402  — read-only registry cross-check (display only)
 from protocol_to_data.download import download_from_url  # noqa: E402  — "Ingest by URL" fallback
 from protocol_to_data import rbac  # noqa: E402  — RBAC stubs (not enforced; see rbac.py)
@@ -339,6 +340,15 @@ _CTA_CSS = """
 """
 
 
+def copilot_respond(message: str, history, output_dir: str) -> str:
+    """gr.ChatInterface handler → route the message to the DuckDB-backed Data Copilot.
+
+    ``output_dir`` arrives from the shared ``out_dir_state`` (additional_inputs) — empty until a
+    pipeline run has produced data, in which case the copilot returns a friendly "run first" note.
+    """
+    return copilot.answer(message, output_dir or "")
+
+
 def build_ui():
     import gradio as gr
 
@@ -353,41 +363,61 @@ def build_ui():
         )
         out_dir_state = gr.State("")
 
-        with gr.Row():
-            with gr.Column(scale=1):
-                file_in = gr.File(label="Protocol (PDF / HTML / .md / .txt)",
-                                  file_types=[".pdf", ".html", ".htm", ".md", ".txt"])
-                url_in = gr.Textbox(label="Or paste a Protocol URL (PDF/HTML/Text)",
-                                    placeholder="https://...")
-                use_sample = gr.Checkbox(label="Use bundled CARDIO-HF sample", value=True)
-                gr.Markdown("<sub>Priority: Sample → URL → File upload.</sub>")
-                subjects = gr.Slider(4, 100, value=40, step=1, label="Subjects")
-                seed = gr.Number(value=42, precision=0, label="Seed (reproducible)",
-                                 info="Same protocol + seed → identical data (reproducible).")
-                anomalies = gr.Slider(
-                    0, 5, value=5, step=1, label="Inject Noise for Pipeline Testing (Anomalies)",
-                    info="Intentionally inject protocol deviations/data errors to test your "
-                         "downstream validation scripts.")
-                export_format = gr.Dropdown(
-                    label="Target Export Format", choices=EXPORT_FORMATS, value=EXPORT_SDTM,
-                    interactive=True, info="SDTM delivered today; EDC ODM-XML on the v2 roadmap.")
-                run_btn = gr.Button("▶  Run the loop", variant="primary", elem_id="main_run_btn")
-                history_dd = gr.Dropdown(label="📁 Load a previous run", choices=_run_choices(),
-                                         value=None, interactive=True)
-            with gr.Column(scale=2):
-                narration = gr.Textbox(label="Live agent narration", lines=10,
-                                       max_lines=25, interactive=False, autoscroll=True)
-                usage_badge = gr.Markdown("🪙 Run Cost: —")  # cumulative tokens + $ for this run
+        with gr.Tabs():
+            with gr.Tab("⚙️ Pipeline"):
+                with gr.Row():
+                    with gr.Column(scale=1):
+                        file_in = gr.File(label="Protocol (PDF / HTML / .md / .txt)",
+                                          file_types=[".pdf", ".html", ".htm", ".md", ".txt"])
+                        url_in = gr.Textbox(label="Or paste a Protocol URL (PDF/HTML/Text)",
+                                            placeholder="https://...")
+                        use_sample = gr.Checkbox(label="Use bundled CARDIO-HF sample", value=True)
+                        gr.Markdown("<sub>Priority: Sample → URL → File upload.</sub>")
+                        subjects = gr.Slider(4, 100, value=40, step=1, label="Subjects")
+                        seed = gr.Number(value=42, precision=0, label="Seed (reproducible)",
+                                         info="Same protocol + seed → identical data (reproducible).")
+                        anomalies = gr.Slider(
+                            0, 5, value=5, step=1,
+                            label="Inject Noise for Pipeline Testing (Anomalies)",
+                            info="Intentionally inject protocol deviations/data errors to test your "
+                                 "downstream validation scripts.")
+                        export_format = gr.Dropdown(
+                            label="Target Export Format", choices=EXPORT_FORMATS, value=EXPORT_SDTM,
+                            interactive=True,
+                            info="SDTM delivered today; EDC ODM-XML on the v2 roadmap.")
+                        run_btn = gr.Button("▶  Run the loop", variant="primary",
+                                            elem_id="main_run_btn")
+                        history_dd = gr.Dropdown(label="📁 Load a previous run",
+                                                 choices=_run_choices(), value=None,
+                                                 interactive=True)
+                    with gr.Column(scale=2):
+                        narration = gr.Textbox(label="Live agent narration", lines=10,
+                                               max_lines=25, interactive=False, autoscroll=True)
+                        usage_badge = gr.Markdown("🪙 Run Cost: —")  # tokens + $ for this run
 
-        with gr.Accordion("🧩 Extracted ProtocolDesign", open=False):
-            design_code = gr.Code(language="json", label="design (post-repair)")
-        with gr.Accordion("🏛️ Registry Cross-Check", open=True):
-            crosscheck_md = gr.Markdown(_CROSSCHECK_IDLE)  # caption folded in (single block)
-        with gr.Accordion("🏭 Generated SDTM data", open=True):
-            domain_dd = gr.Dropdown(label="Domain", choices=[], interactive=True)
-            data_df = gr.Dataframe(label="Preview (first 200 rows)", interactive=False, wrap=True)
-        with gr.Accordion("🎯 Anomaly scorecard", open=True):
-            scorecard = gr.Markdown(_SCORECARD_CAPTION)  # caption folded in (single block)
+                with gr.Accordion("🧩 Extracted ProtocolDesign", open=False):
+                    design_code = gr.Code(language="json", label="design (post-repair)")
+                with gr.Accordion("🏛️ Registry Cross-Check", open=True):
+                    crosscheck_md = gr.Markdown(_CROSSCHECK_IDLE)  # caption folded in (one block)
+                with gr.Accordion("🏭 Generated SDTM data", open=True):
+                    domain_dd = gr.Dropdown(label="Domain", choices=[], interactive=True)
+                    data_df = gr.Dataframe(label="Preview (first 200 rows)", interactive=False,
+                                           wrap=True)
+                with gr.Accordion("🎯 Anomaly scorecard", open=True):
+                    scorecard = gr.Markdown(_SCORECARD_CAPTION)  # caption folded in (one block)
+
+            with gr.Tab("💬 Data Copilot"):
+                gr.Markdown(
+                    "**Chat with your generated SDTM datasets.** Ask in plain English — a DuckDB "
+                    "query runs directly against the on-disk data (memory-safe, no full-file "
+                    "loads), then Claude explains the result. _Run a protocol in the ⚙️ Pipeline "
+                    "tab first._"
+                )
+                gr.ChatInterface(
+                    copilot_respond,
+                    additional_inputs=[out_dir_state],
+                    api_name=False,  # keep the public API surface to just generate_synthetic_data
+                )
 
         # Build marker — shows the deployed commit SHA so any deploy is verifiable by loading
         # the page (Render sets RENDER_GIT_COMMIT; 'local' off-platform).

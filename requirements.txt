@@ -6,3 +6,4 @@ beautifulsoup4>=4.12
 pytest>=8.0
 gradio>=4.44   # web UI (app.py); core CLI works without it
 curl_cffi>=0.7  # browser-TLS fetch for the read-only ClinicalTrials.gov cross-check (WAF bypass)
+duckdb>=1.0  # memory-safe on-disk SQL for the Data Copilot (no full-file loads into pandas)
