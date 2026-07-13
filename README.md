@@ -165,6 +165,16 @@ mine = client.predict(
 Three ways to supply a protocol, in precedence order: **`use_sample` → `protocol_url` (public URL)
 → `file_path` (a local file uploaded via `handle_file`)**. The JSON endpoint returns the extracted
 `ProtocolDesign` and generated file paths — no Gradio UI objects.
+
+> **Free-tier note:** Render's free tier can occasionally drop a request's SSE stream
+> (`CancelledError`) when a worker is busy or restarts. Wrap remote calls in a one-retry — a ready
+> helper ships in [`scripts/ptd_api_client.py`](scripts/ptd_api_client.py):
+> ```python
+> from ptd_api_client import predict_with_retry     # scripts/ on sys.path
+> zip_path = predict_with_retry(client, file_path=handle_file("my_protocol.pdf"),
+>                               use_sample=False, api_name="/download_synthetic_data")
+> ```
+> Only transient errors (`CancelledError`, `ConnectionError`) are retried; real errors surface immediately.
 An NCT id is **auto-detected** from the protocol text; when found, a read-only ClinicalTrials.gov
 cross-check is attached as `registry_crosscheck` (it never influences generation).
 
@@ -299,7 +309,7 @@ In short:
 ```bash
 pip install -r requirements.txt ruff pytest
 ruff check .          # → All checks passed!
-pytest -q             # → 137 passed  (offline; no API key needed)
+pytest -q             # → 140 passed  (offline; no API key needed)
 ```
 
 See **[`CONTRIBUTING.md`](CONTRIBUTING.md)** for the full guidelines.

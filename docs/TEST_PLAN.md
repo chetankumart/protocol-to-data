@@ -3,14 +3,14 @@
 Full E2E coverage for CLI, Web UI, generation, the agentic loop, and enterprise features —
 including edge, boundary, malformed, and error cases.
 
-- **Automated:** `137` offline tests (no API key — LLM calls mocked). Run: `pytest -q`.
+- **Automated:** `140` offline tests (no API key — LLM calls mocked). Run: `pytest -q`.
 - **Lint:** `ruff check .` (enforced in CI on every push/PR).
 - **Legend:** ✅ automated · 👤 manual · 🔑 needs a live `ANTHROPIC_API_KEY`.
 
 Run the automated suite anywhere:
 ```bash
 pip install -r requirements.txt ruff
-ruff check . && pytest -q      # expect: All checks passed! · 137 passed
+ruff check . && pytest -q      # expect: All checks passed! · 140 passed
 ```
 
 ---
@@ -131,6 +131,7 @@ ruff check . && pytest -q      # expect: All checks passed! · 137 passed
 | API-04 | Downloadable ZIP packaging | `_zip_synthetic_data` bundles the CSVs + `design.json` + `run_manifest.json` | ✅ (`test_api`) 👤 (`download_synthetic_data` via `gradio_client`) |
 | API-05 | Upload a protocol file via API | `_uploaded_path` normalizes a `handle_file` upload (dict/`FileData`/str); server extracts the uploaded doc | ✅ (`test_api`) 👤 (`handle_file(...)` → distinct `study_id`) |
 | API-06 | UI ⬇ Download-ZIP button | `_ui_download_zip` zips the current run's output dir (None before a run) | ✅ (`test_api`) 👤 (button downloads in-browser) |
+| API-07 | Free-tier retry wrapper | `predict_with_retry` retries once on transient `CancelledError`/`ConnectionError`; real errors surface immediately | ✅ (`test_api_client`) |
 
 ## 8. Edge / boundary / error cases
 
@@ -155,7 +156,7 @@ ruff check . && pytest -q      # expect: All checks passed! · 137 passed
 
 ## 9. Manual pre-submission smoke (do once before submitting)
 
-1. 👤 Fresh clone → `pip install -r requirements.txt` → `ruff check . && pytest -q` → **All green, 137 passed**.
+1. 👤 Fresh clone → `pip install -r requirements.txt` → `ruff check . && pytest -q` → **All green, 140 passed**.
 2. 🔑 `ptd run examples/sample_protocol.md --seed 42 --anomalies 5` → PASS + 5/5 + cost line.
 3. 🔑 `python app.py` → run sample in the browser → narration + data + scorecard + cost badge.
 4. 👤 `docker compose up` (or `podman-compose up`) → `localhost:7860` serves.
