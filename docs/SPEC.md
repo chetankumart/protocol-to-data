@@ -85,6 +85,11 @@ with `api_name=False`), both callable with `gradio_client` and also surfaced as 
   `gradio_client.predict()` downloads it to the caller's machine and returns a local path). This
   is how a *remote* consumer retrieves the actual data — the JSON endpoint's paths are server-side.
 
+Both accept a protocol three ways, in precedence order **`use_sample` → `protocol_url` →
+`file_path`**. `file_path` is typed `gradio.FileData`, so a remote caller **uploads a local
+protocol file** with `handle_file("protocol.pdf")` and the server extracts *that* document — the
+full **upload → generate → download** loop works end to end over the API, not just server-side paths.
+
 ### Ingest by URL (`download.py`)
 Mobile-friendly ingestion: paste a public protocol URL instead of uploading. `download_from_url`
 fetches to a secure temp file (curl_cffi browser-TLS + urllib fallback, 50 MB cap); precedence is

@@ -109,8 +109,9 @@ python app.py           # then open http://127.0.0.1:7860
 
 The UI has two tabs. **⚙️ Pipeline** — upload a protocol *or paste a URL* (or use the bundled
 sample), set subjects/seed/anomalies, and watch the extract → generate → validate → **repair**
-loop stream live, then browse the generated SDTM CSVs, the 🏛️ Registry Cross-Check, and the
-anomaly scorecard. **💬 Data Copilot** — chat with the generated data and ask for charts. The UI
+loop stream live, then browse the generated SDTM CSVs (with a **⬇ Download SDTM dataset (ZIP)**
+button), the 🏛️ Registry Cross-Check, and the anomaly scorecard. **💬 Data Copilot** — chat with
+the generated data and ask for charts. The UI
 reuses `run_loop` unchanged (presentation only) and is **live at
 [protocol-to-data.onrender.com](https://protocol-to-data.onrender.com)**.
 
@@ -150,10 +151,20 @@ zip_path = client.predict(
     api_name="/download_synthetic_data",
 )
 print("saved:", zip_path)   # e.g. /.../CARDIO-HF-P3_sdtm.zip  (contains the SDTM CSVs)
+
+# 3. upload YOUR OWN protocol file from disk — handle_file() uploads it to the server
+from gradio_client import handle_file
+mine = client.predict(
+    file_path=handle_file("path/to/your_protocol.pdf"), use_sample=False,
+    subjects=40, seed=42, anomalies=0,
+    export_format="SDTM (Parquet) - Databricks Analytics Ready", protocol_url="",
+    api_name="/download_synthetic_data",   # → a ZIP of YOUR uploaded study's SDTM data
+)
 ```
 
-Ingestion precedence is **sample → `protocol_url` → `file_path`**. It returns the extracted
-`ProtocolDesign` and the paths to the generated SDTM files as plain JSON — no Gradio UI objects.
+Three ways to supply a protocol, in precedence order: **`use_sample` → `protocol_url` (public URL)
+→ `file_path` (a local file uploaded via `handle_file`)**. The JSON endpoint returns the extracted
+`ProtocolDesign` and generated file paths — no Gradio UI objects.
 An NCT id is **auto-detected** from the protocol text; when found, a read-only ClinicalTrials.gov
 cross-check is attached as `registry_crosscheck` (it never influences generation).
 
@@ -288,7 +299,7 @@ In short:
 ```bash
 pip install -r requirements.txt ruff pytest
 ruff check .          # → All checks passed!
-pytest -q             # → 135 passed  (offline; no API key needed)
+pytest -q             # → 137 passed  (offline; no API key needed)
 ```
 
 See **[`CONTRIBUTING.md`](CONTRIBUTING.md)** for the full guidelines.

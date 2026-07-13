@@ -122,3 +122,29 @@ def test_zip_synthetic_data_bundles_csvs_design_manifest(tmp_path):
     names = set(zipfile.ZipFile(zip_path).namelist())
     assert {"STUDY-1/dm.csv", "STUDY-1/vs.csv", "STUDY-1/design.json",
             "STUDY-1/run_manifest.json"} <= names
+
+
+def test_uploaded_path_normalizes_api_file_arg():
+    # gradio_client uploads arrive as a dict {"path": ...}; also tolerate FileData / str / None.
+    assert app._uploaded_path(None) == ""
+    assert app._uploaded_path("") == ""
+    assert app._uploaded_path("/srv/x.pdf") == "/srv/x.pdf"
+    assert app._uploaded_path({"path": "/tmp/up.pdf"}) == "/tmp/up.pdf"
+    assert app._uploaded_path({"path": None}) == ""
+
+    class _FD:
+        path = "/tmp/fd.pdf"
+    assert app._uploaded_path(_FD()) == "/tmp/fd.pdf"
+
+
+def test_ui_download_zip_bundles_or_none(tmp_path):
+    import zipfile
+    assert app._ui_download_zip("") is None
+    assert app._ui_download_zip(str(tmp_path / "missing")) is None
+    out = tmp_path / "ZZZ" / "synthetic_data"
+    out.mkdir(parents=True)
+    (out / "dm.csv").write_text("USUBJID\nS-1\n")
+    (out.parent / "run_manifest.json").write_text('{"design": {"study_id": "ZZZ"}}')
+    zp = app._ui_download_zip(str(out))
+    assert zp and zipfile.is_zipfile(zp)
+    assert "ZZZ/dm.csv" in zipfile.ZipFile(zp).namelist()

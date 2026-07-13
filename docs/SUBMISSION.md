@@ -189,8 +189,9 @@ lean, but showing the shape of production:
 - **Ingest by file *or* URL + clean API.** Mobile-friendly URL ingestion (`download.py`, precedence
   sample → URL → file, temp files auto-cleaned), and two typed HTTP endpoints (`gr.api`; UI
   internals hidden) callable via `gradio_client`: **`generate_synthetic_data`** (design + file
-  paths as JSON) and **`download_synthetic_data`** (the SDTM CSVs as a downloadable ZIP, so remote
-  consumers get the actual data, not just server-side paths).
+  paths as JSON) and **`download_synthetic_data`** (the SDTM CSVs as a downloadable ZIP). `file_path`
+  is an uploadable input, so a remote caller can **upload their own protocol** (`handle_file`),
+  generate, and download the result — the full loop over the API, not just server-side paths.
 
 ## Honest limitations & what's next
 

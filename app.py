@@ -287,8 +287,22 @@ def _protocol_source(use_sample: bool, protocol_url: str, file_path):
                 os.remove(tmp_path)
 
 
-def api_run(file_path: str, use_sample: bool = True, subjects: int = 40, seed: int = 42,
-            anomalies: int = 0, export_format: str = EXPORT_SDTM, protocol_url: str = "") -> dict:
+def _uploaded_path(f) -> str:
+    """Normalize an API file argument to a server-side path string ('' if absent).
+
+    Via ``gradio_client``, an uploaded file (``handle_file(...)``) arrives as a dict with a
+    ``path`` key pointing at the server's copy; also tolerates a bare ``FileData`` / path str.
+    """
+    if f is None:
+        return ""
+    if isinstance(f, dict):
+        return f.get("path") or ""
+    return getattr(f, "path", f) or ""
+
+
+def api_run(file_path: FileData | None = None, use_sample: bool = True, subjects: int = 40,
+            seed: int = 42, anomalies: int = 0, export_format: str = EXPORT_SDTM,
+            protocol_url: str = "") -> dict:
     """Clean programmatic entry point (Gradio/MCP endpoint ``generate_synthetic_data``).
 
     Runs the protocol-to-data pipeline and returns ONLY the final artifacts as a JSON-serializable
@@ -303,7 +317,7 @@ def api_run(file_path: str, use_sample: bool = True, subjects: int = 40, seed: i
     final_extras = None
     detected_nct = None
     try:
-        with _protocol_source(use_sample, protocol_url, file_path) as path:
+        with _protocol_source(use_sample, protocol_url, _uploaded_path(file_path)) as path:
             detected_nct = _detect_nct(path)  # zero-click, read-only (never affects generation)
             for _narration, is_final, extras in execute(path, subjects, seed, anomalies):
                 if is_final:
@@ -329,8 +343,8 @@ def api_run(file_path: str, use_sample: bool = True, subjects: int = 40, seed: i
     return resp
 
 
-def api_download(file_path: str, use_sample: bool = True, subjects: int = 40, seed: int = 42,
-                 anomalies: int = 0, export_format: str = EXPORT_SDTM,
+def api_download(file_path: FileData | None = None, use_sample: bool = True, subjects: int = 40,
+                 seed: int = 42, anomalies: int = 0, export_format: str = EXPORT_SDTM,
                  protocol_url: str = "") -> FileData:
     """Downloadable variant of ``generate_synthetic_data`` (endpoint ``download_synthetic_data``).
 
@@ -358,6 +372,20 @@ def _zip_synthetic_data(out_dir: Path, study: str, design: dict) -> Path:
         if manifest.exists():
             z.writestr(f"{study}/run_manifest.json", manifest.read_bytes())
     return zip_path
+
+
+def _ui_download_zip(output_dir: str):
+    """UI ⬇ Download handler: zip the current run's output dir → a filepath the browser downloads.
+    Returns None (no download) if no run has produced data yet."""
+    if not output_dir or not Path(output_dir).exists():
+        return None
+    out = Path(output_dir)
+    design = {}
+    manifest = out.parent / "run_manifest.json"
+    if manifest.exists():
+        with contextlib.suppress(Exception):
+            design = json.loads(manifest.read_text()).get("design", {})
+    return str(_zip_synthetic_data(out, out.parent.name, design))
 
 
 # High-contrast CTA styling so the primary "Run the loop" button pops out of the input column.
@@ -528,6 +556,7 @@ def build_ui():
                     domain_dd = gr.Dropdown(label="Domain", choices=[], interactive=True)
                     data_df = gr.Dataframe(label="Preview (first 200 rows)", interactive=False,
                                            wrap=True)
+                    download_btn = gr.DownloadButton("⬇ Download SDTM dataset (ZIP)", size="sm")
                 with gr.Accordion("🎯 Anomaly scorecard", open=True):
                     scorecard = gr.Markdown(_SCORECARD_CAPTION)  # caption folded in (one block)
 
@@ -606,8 +635,9 @@ def build_ui():
                           [narration, design_code, domain_dd, out_dir_state, scorecard, data_df],
                           api_name=False)
         domain_dd.change(_load_domain_csv, [out_dir_state, domain_dd], data_df, api_name=False)
+        download_btn.click(_ui_download_zip, [out_dir_state], download_btn, api_name=False)
 
-        # The ONLY documented API/MCP endpoint: a clean, typed function returning final artifacts.
+        # The ONLY documented API/MCP endpoints: clean, typed functions returning final artifacts.
         gr.api(api_run, api_name="generate_synthetic_data")
         gr.api(api_download, api_name="download_synthetic_data")  # returns a downloadable ZIP
 
