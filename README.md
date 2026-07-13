@@ -4,6 +4,8 @@
 
 **🔗 Live demo → [protocol-to-data.onrender.com](https://protocol-to-data.onrender.com)** &nbsp;·&nbsp; _free tier — first load takes ~30–60 s to wake, then it's instant._
 
+**🎥 Demo video → [youtu.be/JJXIagmZX3Q](https://youtu.be/JJXIagmZX3Q)** &nbsp;·&nbsp; _2.5-min walkthrough: protocol PDF → live agentic loop → SDTM data → Data Copilot chart._
+
 A researcher, clinical data manager, or biotech engineer drops in a study protocol
 (PDF / HTML / text). Claude reads it, extracts the trial design, and a deterministic engine
 generates a **therapeutic-area-aware, dictionary-coded, referentially-sound SDTM dataset** —
