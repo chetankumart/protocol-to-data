@@ -44,7 +44,7 @@ flowchart TD
 | `src/protocol_to_data/ctg_validator.py` | Read-only ClinicalTrials.gov v2 fetch for the Registry Cross-Check (phase / arms / enrollment); display-only, never feeds generation | no |
 | `src/protocol_to_data/copilot.py` | Data Copilot — NL→DuckDB-SQL over the on-disk CSVs (memory-safe) + result→NL answer or a Plotly chart | **yes (SQL + answer)** |
 | `cli.py` | `ptd run/extract/generate/validate/anomalies` | no |
-| `app.py` | Gradio web UI (⚙️ Pipeline + 💬 Data Copilot tabs); zero-click NCT cross-check; clean `generate_synthetic_data` API endpoint; link-preview + `$PORT` handling | no |
+| `app.py` | Gradio web UI (⚙️ Pipeline + 💬 Data Copilot tabs); zero-click NCT cross-check; clean API endpoints (`generate_synthetic_data` → JSON, `download_synthetic_data` → ZIP); link-preview + `$PORT` handling | no |
 | `mcp_server.py` | FastMCP server exposing `extract_protocol_design` / `generate_sdtm_dataset` / `validate_sdtm_dataset` as MCP tools | **yes (extract)** |
 
 ## Surfaces & deployment

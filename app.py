@@ -16,10 +16,13 @@ import os
 import queue
 import re
 import sys
+import tempfile
 import threading
+import zipfile
 from pathlib import Path
 
 import pandas as pd
+from gradio.data_classes import FileData  # for the downloadable-ZIP API endpoint
 
 _ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(_ROOT / "src"))
@@ -326,6 +329,37 @@ def api_run(file_path: str, use_sample: bool = True, subjects: int = 40, seed: i
     return resp
 
 
+def api_download(file_path: str, use_sample: bool = True, subjects: int = 40, seed: int = 42,
+                 anomalies: int = 0, export_format: str = EXPORT_SDTM,
+                 protocol_url: str = "") -> FileData:
+    """Downloadable variant of ``generate_synthetic_data`` (endpoint ``download_synthetic_data``).
+
+    Runs the same pipeline as ``api_run``, then returns a ZIP of the generated SDTM CSVs plus
+    ``design.json`` and ``run_manifest.json``. Called via ``gradio_client``, the client downloads
+    the ZIP to the caller's machine (``predict()`` returns a local path) — so remote consumers get
+    the actual data, not just server-side paths. Raises on a failed run (no file to return).
+    """
+    result = api_run(file_path, use_sample, subjects, seed, anomalies, export_format, protocol_url)
+    if result.get("status") != "ok":
+        raise RuntimeError(result.get("message", "Generation failed; check server logs."))
+    zip_path = _zip_synthetic_data(Path(result["output_dir"]),
+                                   result.get("study_id") or "dataset", result["design"])
+    return FileData(path=str(zip_path))
+
+
+def _zip_synthetic_data(out_dir: Path, study: str, design: dict) -> Path:
+    """Bundle a run's SDTM CSVs + design.json + run_manifest.json into a ZIP; return its path."""
+    zip_path = Path(tempfile.mkdtemp(prefix="ptd_zip_")) / f"{study}_sdtm.zip"
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
+        for csv in sorted(out_dir.glob("*.csv")):
+            z.writestr(f"{study}/{csv.name}", csv.read_bytes())
+        z.writestr(f"{study}/design.json", json.dumps(design, indent=2))
+        manifest = out_dir.parent / "run_manifest.json"
+        if manifest.exists():
+            z.writestr(f"{study}/run_manifest.json", manifest.read_bytes())
+    return zip_path
+
+
 # High-contrast CTA styling so the primary "Run the loop" button pops out of the input column.
 _CTA_CSS = """
 #main_run_btn {
@@ -575,6 +609,7 @@ def build_ui():
 
         # The ONLY documented API/MCP endpoint: a clean, typed function returning final artifacts.
         gr.api(api_run, api_name="generate_synthetic_data")
+        gr.api(api_download, api_name="download_synthetic_data")  # returns a downloadable ZIP
 
     return demo
 

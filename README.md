@@ -68,8 +68,9 @@ Hybrid AI by design — **Claude reasons, deterministic Python generates**:
   extraction twice ($0 on a cache hit).
 - 🪙 **Cost observability** — live per-run token + `$` tracking in the UI and CLI.
 - 🔌 **MCP server + clean API** — `mcp_server.py` exposes extract / generate / validate as Model
-  Context Protocol tools; the web app also exposes one typed HTTP endpoint,
-  `generate_synthetic_data` (UI-internals hidden), callable via `gradio_client`.
+  Context Protocol tools; the web app also exposes two typed HTTP endpoints —
+  `generate_synthetic_data` (design + file paths as JSON) and `download_synthetic_data`
+  (the SDTM CSVs as a downloadable ZIP) — UI-internals hidden, callable via `gradio_client`.
 - 🔒 **PHI/PII sanitization** — opt-in (`PTD_SANITIZE_PHI=1`): deterministic regex + optional
   Presidio NER scrub the text **before** it reaches the LLM.
 - 🗂️ **Run history · RBAC-aware · EDC-target-aware · Dockerized · CI-guarded · cloud-deployed** —
@@ -120,21 +121,35 @@ MedDRA dictionary coding (AETERM "bad headache" → AEDECOD "Headache")](docs/im
 
 ## Use via API
 
-The same loop is callable programmatically through **one clean endpoint** —
-`generate_synthetic_data` (the UI-update functions are hidden from the API surface, and
-`gr.api` also exposes this as an MCP tool):
+The same loop is callable programmatically through **two clean endpoints** (UI-update functions
+are hidden from the API surface, and `gr.api` also exposes these as MCP tools):
+
+- **`generate_synthetic_data`** → JSON: the extracted design, generated domains, and file paths.
+- **`download_synthetic_data`** → a **downloadable ZIP** of the SDTM CSVs (+ `design.json` +
+  `run_manifest.json`); `gradio_client` saves it to the caller's machine and `predict()` returns
+  the local path. This is how remote consumers get the actual data, not just server-side paths.
 
 ```python
 from gradio_client import Client
 
 client = Client("https://protocol-to-data.onrender.com")
+
+# 1. metadata + design (file paths are server-side)
 result = client.predict(
-    file_path="", use_sample=True, subjects=40, seed=42, anomalies=0,
+    file_path=None, use_sample=True, subjects=40, seed=42, anomalies=0,
     export_format="SDTM (Parquet) - Databricks Analytics Ready",
     protocol_url="",   # or pass a public PDF/HTML/text URL instead of use_sample
     api_name="/generate_synthetic_data",
 )
 print(result["study_id"], result["files"], result["detected_nct"])
+
+# 2. download the actual data — predict() returns a local path to the saved ZIP
+zip_path = client.predict(
+    file_path=None, use_sample=True, subjects=40, seed=42, anomalies=0,
+    export_format="SDTM (Parquet) - Databricks Analytics Ready", protocol_url="",
+    api_name="/download_synthetic_data",
+)
+print("saved:", zip_path)   # e.g. /.../CARDIO-HF-P3_sdtm.zip  (contains the SDTM CSVs)
 ```
 
 Ingestion precedence is **sample → `protocol_url` → `file_path`**. It returns the extracted
@@ -273,7 +288,7 @@ In short:
 ```bash
 pip install -r requirements.txt ruff pytest
 ruff check .          # → All checks passed!
-pytest -q             # → 134 passed  (offline; no API key needed)
+pytest -q             # → 135 passed  (offline; no API key needed)
 ```
 
 See **[`CONTRIBUTING.md`](CONTRIBUTING.md)** for the full guidelines.

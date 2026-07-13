@@ -107,3 +107,18 @@ def test_build_ui_constructs_with_clean_api():
     # Exercises gr.api registration + api_name=False wiring — must not raise.
     demo = app.build_ui()
     assert demo is not None
+
+
+def test_zip_synthetic_data_bundles_csvs_design_manifest(tmp_path):
+    # The downloadable-ZIP endpoint's packaging — offline (no pipeline / API key).
+    import zipfile
+    out = tmp_path / "STUDY-1" / "synthetic_data"
+    out.mkdir(parents=True)
+    (out / "dm.csv").write_text("USUBJID\nS-1\n")
+    (out / "vs.csv").write_text("USUBJID,VSTESTCD\nS-1,SYSBP\n")
+    (out.parent / "run_manifest.json").write_text('{"seed": 42}')
+    zip_path = app._zip_synthetic_data(out, "STUDY-1", {"study_id": "STUDY-1"})
+    assert zipfile.is_zipfile(zip_path)
+    names = set(zipfile.ZipFile(zip_path).namelist())
+    assert {"STUDY-1/dm.csv", "STUDY-1/vs.csv", "STUDY-1/design.json",
+            "STUDY-1/run_manifest.json"} <= names

@@ -5,7 +5,7 @@
 **Repo:** https://github.com/chetankumart/protocol-to-data
 **🔗 Live demo:** **https://protocol-to-data.onrender.com** _(Render free tier — first load may take ~30–60 s to wake, then it's snappy)_
 **🎥 Demo video:** https://youtu.be/JJXIagmZX3Q
-**Run it:** CLI — `ptd run examples/sample_protocol.md --subjects 40 --seed 42 --anomalies 5` · Web UI — `python app.py` · MCP — `python mcp_server.py` (Claude Desktop / any MCP client) · API — `gradio_client` → the clean `generate_synthetic_data` endpoint
+**Run it:** CLI — `ptd run examples/sample_protocol.md --subjects 40 --seed 42 --anomalies 5` · Web UI — `python app.py` · MCP — `python mcp_server.py` (Claude Desktop / any MCP client) · API — `gradio_client` → `generate_synthetic_data` (JSON) or `download_synthetic_data` (ZIP)
 
 > **Note:** The live demo is hosted on a free Render tier (512MB RAM). It perfectly runs the bundled CARDIO-HF sample for evaluation. If you wish to test the full PDF extraction engine with massive protocols, please run the provided Docker container locally to avoid cloud out-of-memory limits.
 
@@ -187,8 +187,10 @@ lean, but showing the shape of production:
   **ClinicalTrials.gov** — anchoring the LLM extraction to public government ground truth without
   ever feeding the registry into generation (`ctg_validator.py`).
 - **Ingest by file *or* URL + clean API.** Mobile-friendly URL ingestion (`download.py`, precedence
-  sample → URL → file, temp files auto-cleaned), and one typed HTTP endpoint
-  **`generate_synthetic_data`** (`gr.api`; UI internals hidden) callable via `gradio_client`.
+  sample → URL → file, temp files auto-cleaned), and two typed HTTP endpoints (`gr.api`; UI
+  internals hidden) callable via `gradio_client`: **`generate_synthetic_data`** (design + file
+  paths as JSON) and **`download_synthetic_data`** (the SDTM CSVs as a downloadable ZIP, so remote
+  consumers get the actual data, not just server-side paths).
 
 ## Honest limitations & what's next
 

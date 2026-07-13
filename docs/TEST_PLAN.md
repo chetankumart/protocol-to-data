@@ -3,14 +3,14 @@
 Full E2E coverage for CLI, Web UI, generation, the agentic loop, and enterprise features —
 including edge, boundary, malformed, and error cases.
 
-- **Automated:** `134` offline tests (no API key — LLM calls mocked). Run: `pytest -q`.
+- **Automated:** `135` offline tests (no API key — LLM calls mocked). Run: `pytest -q`.
 - **Lint:** `ruff check .` (enforced in CI on every push/PR).
 - **Legend:** ✅ automated · 👤 manual · 🔑 needs a live `ANTHROPIC_API_KEY`.
 
 Run the automated suite anywhere:
 ```bash
 pip install -r requirements.txt ruff
-ruff check . && pytest -q      # expect: All checks passed! · 134 passed
+ruff check . && pytest -q      # expect: All checks passed! · 135 passed
 ```
 
 ---
@@ -125,9 +125,10 @@ ruff check . && pytest -q      # expect: All checks passed! · 134 passed
 | URL-01 | Download to temp file | `download_from_url` → abs temp path; suffix from content-type/URL | ✅ (`test_download`) |
 | URL-02 | Ingestion precedence + cleanup | sample → URL → file → error; URL temp file removed in `finally` | ✅ (`test_api`, `test_download`) |
 | URL-03 | Bad scheme / fetch error | `ValueError` / `RuntimeError`, surfaced not crashed | ✅ (`test_download`) |
-| API-01 | Clean endpoint surface | only `generate_synthetic_data` documented (UI events `api_name=False`) | ✅ (`test_api`) 👤 (`view_api`) |
+| API-01 | Clean endpoint surface | only `generate_synthetic_data` + `download_synthetic_data` documented (UI events `api_name=False`) | ✅ (`test_api`) 👤 (`view_api`) |
 | API-02 | Clean payload | returns `study_id`/`design`/file paths as pure JSON; no Gradio objects | ✅ (`test_api`) |
 | API-03 | `build_ui()` constructs | tabs + ChatInterface + `gr.api` + CTA CSS build without error | ✅ (`test_api`) |
+| API-04 | Downloadable ZIP packaging | `_zip_synthetic_data` bundles the CSVs + `design.json` + `run_manifest.json` | ✅ (`test_api`) 👤 (`download_synthetic_data` via `gradio_client`) |
 
 ## 8. Edge / boundary / error cases
 
@@ -152,7 +153,7 @@ ruff check . && pytest -q      # expect: All checks passed! · 134 passed
 
 ## 9. Manual pre-submission smoke (do once before submitting)
 
-1. 👤 Fresh clone → `pip install -r requirements.txt` → `ruff check . && pytest -q` → **All green, 134 passed**.
+1. 👤 Fresh clone → `pip install -r requirements.txt` → `ruff check . && pytest -q` → **All green, 135 passed**.
 2. 🔑 `ptd run examples/sample_protocol.md --seed 42 --anomalies 5` → PASS + 5/5 + cost line.
 3. 🔑 `python app.py` → run sample in the browser → narration + data + scorecard + cost badge.
 4. 👤 `docker compose up` (or `podman-compose up`) → `localhost:7860` serves.

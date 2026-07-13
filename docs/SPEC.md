@@ -74,11 +74,16 @@ A FastMCP server exposes the loop as Model Context Protocol tools for Claude Des
 
 `pip install ".[mcp]"` then `python mcp_server.py` (stdio transport).
 
-### Clean HTTP API (`generate_synthetic_data`)
-The web app exposes exactly one documented endpoint via `gr.api` — `generate_synthetic_data`
-(UI-update functions are hidden with `api_name=False`). It runs the pipeline and returns only
-final artifacts (`study_id`, `design`, generated file paths, optional `registry_crosscheck`) as
-plain JSON. Callable with `gradio_client` (also surfaced as an MCP tool by `gr.api`).
+### Clean HTTP API (`generate_synthetic_data` + `download_synthetic_data`)
+The web app exposes exactly two documented endpoints via `gr.api` (UI-update functions are hidden
+with `api_name=False`), both callable with `gradio_client` and also surfaced as MCP tools:
+
+- **`generate_synthetic_data`** runs the pipeline and returns only final artifacts (`study_id`,
+  `design`, generated file paths, optional `registry_crosscheck`) as plain JSON.
+- **`download_synthetic_data`** runs the same pipeline and returns a **downloadable ZIP** of the
+  SDTM CSVs plus `design.json` and `run_manifest.json` (return-typed `gradio.FileData`, so
+  `gradio_client.predict()` downloads it to the caller's machine and returns a local path). This
+  is how a *remote* consumer retrieves the actual data — the JSON endpoint's paths are server-side.
 
 ### Ingest by URL (`download.py`)
 Mobile-friendly ingestion: paste a public protocol URL instead of uploading. `download_from_url`
