@@ -33,6 +33,14 @@ python cli.py run examples/sample_protocol.md --subjects 20 --seed 42 --anomalie
 pytest -q                  # offline smoke tests (schemas + builtin gen + validate)
 ```
 
+## Demo Tools
+- **Narrated demo video recorder** (`scripts/record_demo.py`, skill `.claude/skills/record-demo/`):
+  Playwright + macOS `say` TTS + ffmpeg → a narrated MP4 of the running web UI. Outside `src/`;
+  drives the UI only, never imports the core package.
+  - **Prereqs:** `brew install ffmpeg` and `pip install playwright && playwright install chromium` (macOS only).
+  - **Run:** start the app (`python app.py`), then `python scripts/record_demo.py` (add
+    `--live-run` to click Run and record the real loop; `--headless --mute` for CI/tests).
+
 ## Do NOT
 - Import from the private `protocol-synthetic-data-generation` engine except via the
   documented ENGINE BRIDGE in `generate.py`.
