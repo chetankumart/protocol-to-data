@@ -52,6 +52,16 @@ class DomainPlan(BaseModel):
     key_variables: list[str] = Field(default_factory=list)
 
 
+class AEGrounding(BaseModel):
+    """One real-world adverse-event frequency from OpenFDA (a MedDRA PT + its report count).
+
+    Captured on the design at design time (see `grounding.py`); the deterministic generator uses
+    the counts as sampling weights. Provenance rides along in `run_manifest.json` via the design.
+    """
+    term: str                 # OpenFDA reactionmeddrapt, normalized to a MedDRA-style PT
+    count: int                # number of reports (used as a sampling weight)
+
+
 class ProtocolDesign(BaseModel):
     study_id: str
     title: str = ""
@@ -64,6 +74,7 @@ class ProtocolDesign(BaseModel):
     population: Population = Field(default_factory=Population)
     domains: list[DomainPlan] = Field(default_factory=list)
     assumptions: list[str] = Field(default_factory=list)
+    grounded_ae: list[AEGrounding] = Field(default_factory=list)  # OpenFDA AE frequencies (opt-in)
 
     def domain_names(self) -> list[str]:
         return [d.domain for d in self.domains]
