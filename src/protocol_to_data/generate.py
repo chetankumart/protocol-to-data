@@ -13,6 +13,7 @@ repo runs standalone for judges.
 from __future__ import annotations
 
 import random
+import re
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -447,17 +448,34 @@ def _gen_eg(design: ProtocolDesign, subs: list[dict], rng: random.Random) -> pd.
 
 # ----------------------------------------------------------- PC (PK concentrations) · oncology
 
+_PC_COLUMNS = ["STUDYID", "USUBJID", "PCSEQ", "VISIT", "VISITNUM",
+               "PCTESTCD", "PCORRES", "PCORRESU", "PCDTC"]
+_PC_DOSE_RE = re.compile(r"\b\d[\d.,]*\s*(mg/m2|mg|mcg|g|ml|iu|units?|%)\b.*", re.IGNORECASE)
+
+
+def _pc_analyte(arm_name: str) -> str:
+    """An SDTM-style analyte code (≤8 chars) from an arm's drug name — 'BGB-A317 200 mg' → 'BGBA317'."""
+    code = re.sub(r"[^A-Za-z0-9]", "", _PC_DOSE_RE.sub("", arm_name or "")).upper()[:8]
+    return code or "STUDYDRUG"
+
+
 def _gen_pc(design: ProtocolDesign, subs: list[dict], rng: random.Random) -> pd.DataFrame:
-    """Plasma PK concentrations at treatment visits — the CDISC-correct home for PK (was in LB)."""
+    """Plasma PK concentrations at treatment visits for EACH active (non-placebo) arm's drug —
+    the CDISC-correct home for PK (was in LB). Known regimens use calibrated ranges; any other
+    drug gets a generic plausible profile keyed by the arm's name, so PK is no longer
+    docetaxel/sotorasib-only. Always returns the PC columns (empty-safe: no 0-byte files)."""
     visits = _ordered_visits(design)
     rows, seq = [], {}
     for s in subs:
-        name = s["ARM"].lower()
-        docetaxel = "docetaxel" in name
-        sotorasib = ("amg" in name) or ("sotorasib" in name)
-        if not (docetaxel or sotorasib):
+        if s["IS_PLACEBO"]:
             continue
-        analyte, mean, sd = ("SOTORASIB", 900, 350) if sotorasib else ("DOCETAXEL", 2200, 800)
+        low = s["ARM"].lower()
+        if "docetaxel" in low:
+            analyte, mean, sd = "DOCETAXEL", 2200, 800
+        elif ("amg" in low) or ("sotorasib" in low):
+            analyte, mean, sd = "SOTORASIB", 900, 350
+        else:
+            analyte, mean, sd = _pc_analyte(s["ARM"]), 1200, 500   # generic drug profile
         for v in visits:
             if getattr(v, "is_screening", False):
                 continue
@@ -469,7 +487,7 @@ def _gen_pc(design: ProtocolDesign, subs: list[dict], rng: random.Random) -> pd.
                 "PCTESTCD": analyte, "PCORRES": round(max(rng.gauss(mean, sd), 0.0), 0),
                 "PCORRESU": "ng/mL", "PCDTC": vdate.isoformat(),
             })
-    return pd.DataFrame(rows)
+    return pd.DataFrame(rows, columns=_PC_COLUMNS)  # explicit columns → never a 0-byte file
 
 
 # --------------------------------------------------------- TU / TR (RECIST tumor) · oncology

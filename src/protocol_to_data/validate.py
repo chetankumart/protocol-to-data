@@ -38,6 +38,15 @@ LAB_BOUNDS = {
 }
 
 
+def _safe_read_csv(path) -> pd.DataFrame:
+    """Read a domain CSV, tolerating an empty/headerless file (0-byte) — returns an empty frame
+    instead of raising EmptyDataError, so a degenerate domain is flagged, never crashes validation."""
+    try:
+        return pd.read_csv(path)
+    except pd.errors.EmptyDataError:
+        return pd.DataFrame()
+
+
 def _count_out_of_range(df: pd.DataFrame, testcd_col: str, orres_col: str,
                         bounds: dict[str, tuple[float, float]]) -> int:
     oob = 0
@@ -52,7 +61,7 @@ def validate_dataset(design: ProtocolDesign, data_dir: str | Path) -> Validation
     findings: list[ValidationFinding] = []
 
     csvs = {p.stem: p for p in data_dir.glob("*.csv")}
-    frames = {name: pd.read_csv(p) for name, p in csvs.items()}
+    frames = {name: _safe_read_csv(p) for name, p in csvs.items()}
 
     # non-empty + schema
     for name, df in frames.items():

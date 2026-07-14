@@ -119,3 +119,20 @@ def test_tu_tr_recist_lesions_linked(tmp_path):
     assert (tu["TUTESTCD"] == "TUMIDENT").all() and (tu["TUORRES"] == "TARGET").all()
     assert (tr["TRTESTCD"] == "LDIAM").all()
     assert set(tr["TRLNKID"]) <= set(tu["TULNKID"])           # RECIST TR→TU link integrity
+
+
+def test_pc_generic_for_any_active_drug(tmp_path):
+    # BeiGene-style regression: a non-docetaxel/sotorasib drug must still produce PK in PC
+    # (no 0-byte pc.csv → no EmptyDataError in validation).
+    d = ProtocolDesign(
+        study_id="BGB-TEST", therapeutic_area="oncology",
+        arms=[Arm(name="BGB-A317 200 mg"), Arm(name="Placebo", is_placebo=True)],
+        visits=[Visit(name="Screening", day=-14, is_screening=True), Visit(name="C1D1", day=1)],
+        population=Population(n_subjects=12),
+        domains=[DomainPlan(domain=x) for x in ("DM", "PC")],
+    )
+    out = generate_dataset(d, subjects=12, seed=42, out_root=tmp_path)
+    pc = pd.read_csv(out / "pc.csv")
+    assert not pc.empty
+    assert set(pc["PCTESTCD"]) == {"BGBA317"}          # generic analyte from arm name
+    assert validate_dataset(d, out).passed

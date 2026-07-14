@@ -168,3 +168,14 @@ def test_cache_same_content_shares_entry(tmp_path, monkeypatch):
     extract_design(tmp_path / "a.md")   # miss → extracts + caches
     extract_design(tmp_path / "b.md")   # same content hash → cache hit, no 2nd call
     assert calls["n"] == 1
+
+
+def test_validate_tolerates_empty_csv(tmp_path):
+    # A 0-byte domain CSV must be FLAGGED, never crash validation with EmptyDataError.
+    (tmp_path / "dm.csv").write_text(
+        "STUDYID,USUBJID,ARM,AGE,SEX,RFSTDTC\nS,S-1,A,50,M,2026-01-01\n")
+    (tmp_path / "pc.csv").write_text("")   # empty, headerless
+    d = ProtocolDesign(study_id="S", domains=[DomainPlan(domain="DM"), DomainPlan(domain="PC")])
+    report = validate_dataset(d, tmp_path)  # must not raise
+    assert not report.passed
+    assert any(f.domain == "PC" for f in report.findings)
