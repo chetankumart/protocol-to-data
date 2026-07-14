@@ -1,8 +1,12 @@
-"""Stage 7 — ANOMALY LOOP: inject controlled errors, then Claude detects & explains.
+"""Stage 7 — ANOMALY LOOP: inject controlled *clinical-plausibility* defects, then Claude detects.
 
-Injection is deterministic (seeded). Detection is Claude-driven and scored against the
-ground-truth injections so the demo can show "N/N caught". Each injector introduces one
-clearly-detectable, clinically-meaningful defect from the SPEC anomaly catalog.
+v2 pivot: this deliberately does NOT re-check schema/integrity errors (orphans, out-of-range
+values, pre-dose dates, wrong-sex forms) — those are caught deterministically by `validate.py`, so
+having an LLM re-find them was redundant. Instead the injectors plant defects that are **schema-
+valid but pharmacologically implausible** (a severe drug-class AE on placebo, an all-severe
+severity profile, a reversed dose-response) — things only clinical/pharmacological reasoning can
+flag. Injection is deterministic (seeded); detection is Claude-driven and scored against the
+ground-truth injections so the demo can still show "N/N caught".
 """
 
 from __future__ import annotations
@@ -28,8 +32,8 @@ def inject_anomalies(data_dir: str | Path, *, count: int, seed: int) -> list[dic
     data_dir = Path(data_dir)
     injected: list[dict] = []
 
-    injectors = [_inject_predose_ae, _inject_oob_vital, _inject_orphan,
-                 _inject_dup_visit, _inject_pregnancy_male]
+    injectors = [_inject_placebo_severe_ae, _inject_severity_implausible,
+                 _inject_dose_response_reversal]
     rng.shuffle(injectors)
     for fn in injectors[:count]:
         rec = fn(data_dir, rng)
@@ -38,88 +42,81 @@ def inject_anomalies(data_dir: str | Path, *, count: int, seed: int) -> list[dic
     return injected
 
 
-def _inject_predose_ae(data_dir: Path, rng) -> dict | None:
-    """Temporal: an adverse event onset before first dose."""
-    p = data_dir / "ae.csv"
-    if not p.exists():
-        return None
-    df = pd.read_csv(p)
-    if df.empty:
-        return None
-    df.loc[0, "AESTDTC"] = "2020-01-01"  # clearly before any dose
-    df.to_csv(p, index=False)
-    return {"type": "temporal", "domain": "AE", "usubjid": str(df.loc[0, "USUBJID"])}
+def _placebo_ids(dm: pd.DataFrame) -> pd.Series:
+    return dm[dm["ARM"].astype(str).str.contains("placebo", case=False, na=False)]["USUBJID"]
 
 
-def _inject_oob_vital(data_dir: Path, rng) -> dict | None:
-    """Physiologic: an impossible systolic blood pressure."""
-    p = data_dir / "vs.csv"
-    if not p.exists():
-        return None
-    df = pd.read_csv(p)
-    idx = df.index[df["VSTESTCD"] == "SYSBP"]
-    if len(idx) == 0:
-        return None
-    df.loc[idx[0], "VSORRES"] = 400
-    df.to_csv(p, index=False)
-    return {"type": "physiologic", "domain": "VS", "usubjid": str(df.loc[idx[0], "USUBJID"])}
+def _inject_placebo_severe_ae(data_dir: Path, rng) -> dict | None:
+    """Pharmacologic: a SEVERE, serious drug-class adverse event on a PLACEBO-arm subject.
 
-
-def _inject_orphan(data_dir: Path, rng) -> dict | None:
-    """Referential: a child-domain record whose subject has no DM row (prefers LB)."""
-    for name in ("lb.csv", "vs.csv"):
-        p = data_dir / name
-        if not p.exists():
-            continue
-        df = pd.read_csv(p)
-        if df.empty:
-            continue
-        row = df.iloc[0].copy()
-        row["USUBJID"] = "GHOST-9999"
-        pd.concat([df, pd.DataFrame([row])], ignore_index=True).to_csv(p, index=False)
-        return {"type": "referential", "domain": name[:2].upper(), "usubjid": "GHOST-9999"}
-    return None
-
-
-def _inject_dup_visit(data_dir: Path, rng) -> dict | None:
-    """Uniqueness: a duplicated vital-signs record."""
-    p = data_dir / "vs.csv"
-    if not p.exists():
-        return None
-    df = pd.read_csv(p)
-    if df.empty:
-        return None
-    pd.concat([df, df.iloc[[0]]], ignore_index=True).to_csv(p, index=False)
-    return {"type": "uniqueness", "domain": "VS", "usubjid": str(df.iloc[0]["USUBJID"])}
-
-
-def _inject_pregnancy_male(data_dir: Path, rng) -> dict | None:
-    """Logical: a PREGNANCY adverse event recorded for a male subject.
-
-    Uses a valid (on/after first-dose) onset date so the *only* defect is the logical one,
-    not a temporal one — keeps the ground truth unambiguous.
+    Schema-VALID by construction (real subject, on/after-dose onset, valid severity) — so
+    deterministic validation PASSES. The defect is purely pharmacological: placebo shouldn't
+    produce severe febrile neutropenia. Only Claude, reasoning about the assigned arm, can flag it.
     """
     ae_p, dm_p = data_dir / "ae.csv", data_dir / "dm.csv"
     if not ae_p.exists() or not dm_p.exists():
         return None
     dm = pd.read_csv(dm_p)
-    males = dm[dm["SEX"] == "M"]["USUBJID"].tolist()
-    uid = males[0] if males else str(dm["USUBJID"].iloc[0])
-    onset = dm.loc[dm["USUBJID"] == uid, "RFSTDTC"].iloc[0]
-
+    placebo = _placebo_ids(dm)
+    if placebo.empty:
+        return None
+    uid = str(placebo.iloc[0])
+    onset = dm.loc[dm["USUBJID"] == uid, "RFSTDTC"].iloc[0]  # valid (== first dose), not pre-dose
     ae = pd.read_csv(ae_p)
     row = {c: "" for c in ae.columns}
     row.update({
         "STUDYID": dm["STUDYID"].iloc[0] if "STUDYID" in dm.columns else "",
         "USUBJID": uid,
         "AESEQ": (int(ae["AESEQ"].max()) + 1) if ("AESEQ" in ae.columns and not ae.empty) else 1,
-        "AETERM": "PREGNANCY",
-        "AEDECOD": "Pregnancy",  # MedDRA-coded even for the injected defect
-        "AESTDTC": onset,
-        "AESEV": "MODERATE",
+        "AETERM": "Febrile neutropenia", "AEDECOD": "Febrile neutropenia",
+        "AESTDTC": onset, "AESEV": "SEVERE",
     })
     pd.concat([ae, pd.DataFrame([row])], ignore_index=True).to_csv(ae_p, index=False)
-    return {"type": "logical", "domain": "AE", "usubjid": str(uid)}
+    return {"type": "pharmacologic", "domain": "AE", "usubjid": uid}
+
+
+def _inject_severity_implausible(data_dir: Path, rng) -> dict | None:
+    """Severity: escalate ALL of one subject's adverse events to SEVERE — an implausible severity
+    distribution (real trials skew mild/moderate). Schema-valid AESEV values; validation passes."""
+    p = data_dir / "ae.csv"
+    if not p.exists():
+        return None
+    ae = pd.read_csv(p)
+    if ae.empty or not {"AESEV", "USUBJID"}.issubset(ae.columns):
+        return None
+    uid = str(ae["USUBJID"].iloc[0])
+    ae.loc[ae["USUBJID"] == uid, "AESEV"] = "SEVERE"
+    ae.to_csv(p, index=False)
+    return {"type": "severity", "domain": "AE", "usubjid": uid}
+
+
+# drug-sensitive labs and the reversed (no-treatment-effect) value to plant, in preference order
+_REVERSAL_MARKERS = [("NTPROBNP", 3000.0), ("NEUT", 8.5)]
+
+
+def _inject_dose_response_reversal(data_dir: Path, rng) -> dict | None:
+    """Dose-response: flatten an active-drug arm's drug-sensitive lab so it shows NO treatment
+    effect (NT-proBNP stays high on an effective HF drug; neutrophils stay normal on a
+    myelosuppressive agent). Values remain in physiologic range → validation passes; only
+    pharmacological reasoning flags the missing dose-response."""
+    lb_p, dm_p = data_dir / "lb.csv", data_dir / "dm.csv"
+    if not lb_p.exists() or not dm_p.exists():
+        return None
+    lb, dm = pd.read_csv(lb_p), pd.read_csv(dm_p)
+    if not {"LBTESTCD", "LBORRES", "USUBJID"}.issubset(lb.columns):
+        return None
+    drug = set(dm["USUBJID"]) - set(_placebo_ids(dm))
+    codes = set(lb["LBTESTCD"])
+    marker = next(((c, v) for c, v in _REVERSAL_MARKERS if c in codes), None)
+    if marker is None or not drug:
+        return None
+    code, val = marker
+    mask = (lb["LBTESTCD"] == code) & (lb["USUBJID"].isin(drug))
+    if not mask.any():
+        return None
+    lb.loc[mask, "LBORRES"] = val
+    lb.to_csv(lb_p, index=False)
+    return {"type": "dose_response", "domain": "LB", "usubjid": str(lb.loc[mask, "USUBJID"].iloc[0])}
 
 
 def detect_anomalies(design: ProtocolDesign, data_dir: str | Path, *,

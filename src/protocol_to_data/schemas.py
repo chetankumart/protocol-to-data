@@ -101,7 +101,9 @@ class ValidationReport(BaseModel):
 class AnomalyFinding(BaseModel):
     domain: str
     usubjid: Optional[str] = None
-    anomaly_type: Literal["temporal", "physiologic", "referential", "uniqueness", "logical"]
+    # v2 pivot: the detector now judges CLINICAL PLAUSIBILITY (things validate.py can't catch),
+    # not schema/integrity errors (orphans, ranges, temporal, sex) which are deterministic.
+    anomaly_type: Literal["pharmacologic", "dose_response", "severity"]
     description: str
     evidence: str = ""
     severity: Literal["high", "medium", "low"] = "high"

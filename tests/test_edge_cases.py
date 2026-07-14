@@ -112,9 +112,9 @@ def test_anomalies_on_dm_only_dataset_no_crash(tmp_path):
 
 
 def test_score_more_findings_than_truth():
-    truth = [{"type": "temporal", "domain": "AE", "usubjid": "S1"}]
-    findings = [AnomalyFinding(domain="AE", anomaly_type="temporal", description="x"),
-                AnomalyFinding(domain="QS", anomaly_type="uniqueness", description="extra")]
+    truth = [{"type": "pharmacologic", "domain": "AE", "usubjid": "S1"}]
+    findings = [AnomalyFinding(domain="AE", anomaly_type="pharmacologic", description="x"),
+                AnomalyFinding(domain="QS", anomaly_type="severity", description="extra")]
     s = score_detections(truth, findings)
     assert s["caught"] == 1 and len(s["extra"]) == 1
 
