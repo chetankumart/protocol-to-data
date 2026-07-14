@@ -24,7 +24,9 @@ ENROLLMENT_START = date(2026, 1, 15)
 
 # SDTM domains the builtin backend can emit. A planned domain outside this set can't be
 # generated standalone — the loop's repair step remaps or drops it (see validate coverage check).
-BUILTIN_DOMAINS = {"DM", "VS", "LB", "QS", "AE", "EX", "RS", "CM"}
+# EG/PC/TU/TR added in v2 so the oncology repair stops *deleting* clinically-meaningful domains:
+# EG = ECG, PC = PK concentrations (moved out of LB), TU/TR = RECIST tumor identification/results.
+BUILTIN_DOMAINS = {"DM", "VS", "LB", "QS", "AE", "EX", "RS", "CM", "EG", "PC", "TU", "TR"}
 
 # ---------------------------------------------------------------- therapeutic-area profile
 
@@ -120,6 +122,18 @@ def _generate_builtin(design: ProtocolDesign, *, subjects: int, seed: int,
         frames["cm"] = _gen_cm(design, subs, rng, profile)
     if "EX" in planned:
         frames["ex"] = _gen_ex(design, subs, profile)
+    # v2 depth — domains the repair loop used to delete. Placed last so they only consume the RNG
+    # (and only exist) when actually planned; existing domains' output is unchanged otherwise.
+    if "EG" in planned:
+        frames["eg"] = _gen_eg(design, subs, rng)
+    if "PC" in planned:
+        frames["pc"] = _gen_pc(design, subs, rng)
+    if "TU" in planned or "TR" in planned:
+        tu_rows, tr_rows = _gen_tumor(design, subs, rng)
+        if "TU" in planned:
+            frames["tu"] = pd.DataFrame(tu_rows)
+        if "TR" in planned:
+            frames["tr"] = pd.DataFrame(tr_rows)
 
     _enforce_referential_integrity(frames)  # drop orphans + assert before writing
 
@@ -308,17 +322,8 @@ def _gen_lb_oncology(design: ProtocolDesign, subs: list[dict], rng: random.Rando
                     "LBTESTCD": tc, "LBORRES": round(max(val, 0.0), dec), "LBORRESU": unit,
                     "LBDTC": vdate.isoformat(),
                 })
-            # PK concentration on treatment visits (post first dose)
-            if not getattr(v, "is_screening", False) and (docetaxel or sotorasib):
-                tc, mean, sd = (("SOTORASIB", 900, 350) if sotorasib else ("DOCETAXEL", 2200, 800))
-                seq[s["USUBJID"]] = seq.get(s["USUBJID"], 0) + 1
-                rows.append({
-                    "STUDYID": design.study_id, "USUBJID": s["USUBJID"],
-                    "LBSEQ": seq[s["USUBJID"]], "LBCAT": "PK",
-                    "VISIT": getattr(v, "name", "VISIT"), "VISITNUM": _visitnum(v, design),
-                    "LBTESTCD": tc, "LBORRES": round(max(rng.gauss(mean, sd), 0.0), 0),
-                    "LBORRESU": "ng/mL", "LBDTC": vdate.isoformat(),
-                })
+            # (PK concentrations moved to the dedicated PC domain — see _gen_pc — which is the
+            # CDISC-correct home; they no longer pollute LB.)
     return pd.DataFrame(rows)
 
 
@@ -414,6 +419,105 @@ def _gen_rs(design: ProtocolDesign, subs: list[dict], rng: random.Random) -> pd.
                 "RSTESTCD": "OVRLRESP", "RSORRES": resp, "RSDTC": vdate.isoformat(),
             })
     return pd.DataFrame(rows)
+
+
+# ------------------------------------------------------------------ EG (ECG) · universal
+
+_EG_PANEL = [("QT", 400, 25, "msec"), ("QTCF", 415, 18, "msec"), ("HR", 72, 10, "beats/min"),
+             ("PR", 158, 20, "msec"), ("QRS", 95, 12, "msec")]
+
+
+def _gen_eg(design: ProtocolDesign, subs: list[dict], rng: random.Random) -> pd.DataFrame:
+    """12-lead ECG parameters (QT/QTcF/HR/PR/QRS) at each visit — applicable to any area."""
+    visits = _ordered_visits(design)
+    rows, seq = [], {}
+    for s in subs:
+        for v in visits:
+            vdate = _visit_date(s["RFSTDTC"], getattr(v, "day", 1))
+            for tc, mean, sd, unit in _EG_PANEL:
+                seq[s["USUBJID"]] = seq.get(s["USUBJID"], 0) + 1
+                rows.append({
+                    "STUDYID": design.study_id, "USUBJID": s["USUBJID"], "EGSEQ": seq[s["USUBJID"]],
+                    "VISIT": getattr(v, "name", "VISIT"), "VISITNUM": _visitnum(v, design),
+                    "EGTESTCD": tc, "EGORRES": round(rng.gauss(mean, sd), 0), "EGORRESU": unit,
+                    "EGDTC": vdate.isoformat(),
+                })
+    return pd.DataFrame(rows)
+
+
+# ----------------------------------------------------------- PC (PK concentrations) · oncology
+
+def _gen_pc(design: ProtocolDesign, subs: list[dict], rng: random.Random) -> pd.DataFrame:
+    """Plasma PK concentrations at treatment visits — the CDISC-correct home for PK (was in LB)."""
+    visits = _ordered_visits(design)
+    rows, seq = [], {}
+    for s in subs:
+        name = s["ARM"].lower()
+        docetaxel = "docetaxel" in name
+        sotorasib = ("amg" in name) or ("sotorasib" in name)
+        if not (docetaxel or sotorasib):
+            continue
+        analyte, mean, sd = ("SOTORASIB", 900, 350) if sotorasib else ("DOCETAXEL", 2200, 800)
+        for v in visits:
+            if getattr(v, "is_screening", False):
+                continue
+            vdate = _visit_date(s["RFSTDTC"], getattr(v, "day", 1))
+            seq[s["USUBJID"]] = seq.get(s["USUBJID"], 0) + 1
+            rows.append({
+                "STUDYID": design.study_id, "USUBJID": s["USUBJID"], "PCSEQ": seq[s["USUBJID"]],
+                "VISIT": getattr(v, "name", "VISIT"), "VISITNUM": _visitnum(v, design),
+                "PCTESTCD": analyte, "PCORRES": round(max(rng.gauss(mean, sd), 0.0), 0),
+                "PCORRESU": "ng/mL", "PCDTC": vdate.isoformat(),
+            })
+    return pd.DataFrame(rows)
+
+
+# --------------------------------------------------------- TU / TR (RECIST tumor) · oncology
+
+_TU_LOCATIONS = ["LUNG", "LIVER", "LYMPH NODE", "BONE", "ADRENAL GLAND"]
+
+
+def _gen_tumor(design: ProtocolDesign, subs: list[dict],
+               rng: random.Random) -> tuple[list[dict], list[dict]]:
+    """RECIST target lesions: TU (identification at baseline) + TR (longest diameter over time).
+
+    Returns (tu_rows, tr_rows). Lesions shrink faster on active treatment; TU and TR share a
+    per-lesion ``LNKID`` so the two domains are relationally linked (SDTM `--LNKID`).
+    """
+    ordered = _ordered_visits(design)
+    baseline = next((v for v in ordered if not getattr(v, "is_screening", False)), ordered[0])
+    assess = [v for v in ordered if not getattr(v, "is_screening", False)
+              and getattr(v, "day", 1) >= getattr(baseline, "day", 1)]
+    tu_rows, tr_rows = [], []
+    for s in subs:
+        drug = not s["IS_PLACEBO"]
+        tu_seq = tr_seq = 0
+        bdate = _visit_date(s["RFSTDTC"], getattr(baseline, "day", 1))
+        lesions = []
+        for i in range(rng.randint(1, 3)):
+            lnk = f"T{i + 1}"
+            base = _clamp(rng.gauss(35, 12), 10, 90)
+            lesions.append((lnk, base))
+            tu_seq += 1
+            tu_rows.append({
+                "STUDYID": design.study_id, "USUBJID": s["USUBJID"], "TUSEQ": tu_seq,
+                "TULNKID": lnk, "TUTESTCD": "TUMIDENT", "TUORRES": "TARGET",
+                "TULOC": rng.choice(_TU_LOCATIONS),
+                "VISIT": getattr(baseline, "name", "VISIT"), "VISITNUM": _visitnum(baseline, design),
+                "TUDTC": bdate.isoformat(),
+            })
+        for j, v in enumerate(assess):
+            vdate = _visit_date(s["RFSTDTC"], getattr(v, "day", 1))
+            for lnk, base in lesions:
+                diam = _clamp(base * ((0.85 if drug else 0.98) ** j) + rng.gauss(0, 2), 0, 120)
+                tr_seq += 1
+                tr_rows.append({
+                    "STUDYID": design.study_id, "USUBJID": s["USUBJID"], "TRSEQ": tr_seq,
+                    "TRLNKID": lnk, "TRTESTCD": "LDIAM", "TRORRES": round(diam, 0), "TRORRESU": "mm",
+                    "VISIT": getattr(v, "name", "VISIT"), "VISITNUM": _visitnum(v, design),
+                    "TRDTC": vdate.isoformat(),
+                })
+    return tu_rows, tr_rows
 
 
 # --------------------------------------------------------------------------- AE (by profile)

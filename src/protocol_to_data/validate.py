@@ -20,6 +20,10 @@ REQUIRED_COLUMNS = {
     "ae": {"USUBJID", "AETERM", "AEDECOD", "AESTDTC"},   # AEDECOD = MedDRA-coded term
     "cm": {"USUBJID", "CMTRT", "CMDECOD", "CMSTDTC"},    # CMDECOD = WHODrug-coded name
     "ex": {"USUBJID", "EXTRT", "EXSTDTC"},
+    "eg": {"USUBJID", "EGTESTCD", "EGORRES", "EGDTC"},   # ECG
+    "pc": {"USUBJID", "PCTESTCD", "PCORRES", "PCDTC"},   # PK concentrations
+    "tu": {"USUBJID", "TUTESTCD", "TUORRES", "TUDTC"},   # RECIST tumor identification
+    "tr": {"USUBJID", "TRTESTCD", "TRORRES", "TRDTC"},   # RECIST tumor results
 }
 
 VITAL_BOUNDS = {"SYSBP": (60, 260), "DIABP": (30, 160), "PULSE": (30, 200)}

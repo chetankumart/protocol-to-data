@@ -33,7 +33,8 @@ def _amg510_design() -> ProtocolDesign:
                 Visit(name="Tumor Assessment Week 7", day=49),
                 Visit(name="Tumor Assessment Week 13", day=91)],
         population=Population(n_subjects=20, sex="all"),
-        domains=[DomainPlan(domain=d) for d in ("DM", "VS", "LB", "QS", "AE", "EX", "RS")],
+        domains=[DomainPlan(domain=d)
+                 for d in ("DM", "VS", "LB", "QS", "AE", "EX", "RS", "EG", "PC", "TU", "TR")],
     )
 
 
@@ -47,7 +48,7 @@ def test_profile_detected_as_oncology():
 
 def test_generates_all_domains_and_validates(tmp_path):
     out = _dataset(tmp_path)
-    for f in ("dm", "vs", "lb", "qs", "ae", "ex", "rs"):
+    for f in ("dm", "vs", "lb", "qs", "ae", "ex", "rs", "eg", "pc", "tu", "tr"):
         assert (out / f"{f}.csv").exists(), f"missing {f}.csv"
     report = validate_dataset(_amg510_design(), out)
     assert report.passed, [f.message for f in report.findings]
@@ -60,8 +61,8 @@ def test_lb_is_oncology_panel_not_cardiac(tmp_path):
     # hematology + chemistry + coagulation + thyroid all represented
     for expected in ("HGB", "NEUT", "PLT", "ALT", "AST", "INR", "APTT", "TSH", "FT4"):
         assert expected in tests, f"missing lab {expected}"
-    # PK concentrations present, arm-specific
-    assert "SOTORASIB" in tests and "DOCETAXEL" in tests
+    # PK concentrations moved OUT of LB into the dedicated PC domain (CDISC-correct home)
+    assert "SOTORASIB" not in tests and "DOCETAXEL" not in tests
 
 
 def test_qs_is_oncology_instruments(tmp_path):
@@ -98,3 +99,23 @@ def test_oncology_deterministic(tmp_path):
     b = _dataset(tmp_path / "b")
     for f in ("lb", "qs", "rs", "ex"):
         assert (a / f"{f}.csv").read_text() == (b / f"{f}.csv").read_text()
+
+
+def test_pc_holds_pk_concentrations(tmp_path):
+    pc = pd.read_csv(_dataset(tmp_path) / "pc.csv")
+    assert not pc.empty
+    assert set(pc["PCTESTCD"]) <= {"SOTORASIB", "DOCETAXEL"}   # PK now lives in PC, not LB
+    assert (pc["PCORRESU"] == "ng/mL").all()
+
+
+def test_eg_has_ecg_parameters(tmp_path):
+    eg = pd.read_csv(_dataset(tmp_path) / "eg.csv")
+    assert {"QT", "QTCF", "HR", "PR", "QRS"} <= set(eg["EGTESTCD"])
+
+
+def test_tu_tr_recist_lesions_linked(tmp_path):
+    out = _dataset(tmp_path)
+    tu, tr = pd.read_csv(out / "tu.csv"), pd.read_csv(out / "tr.csv")
+    assert (tu["TUTESTCD"] == "TUMIDENT").all() and (tu["TUORRES"] == "TARGET").all()
+    assert (tr["TRTESTCD"] == "LDIAM").all()
+    assert set(tr["TRLNKID"]) <= set(tu["TULNKID"])           # RECIST TR→TU link integrity

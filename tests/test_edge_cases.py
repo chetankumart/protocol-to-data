@@ -84,12 +84,12 @@ def test_no_visits_falls_back(tmp_path):
 
 
 def test_only_unproducible_domain_fails_coverage(tmp_path):
-    d = _design(domains=("DM", "EG"))  # EG can't be produced by the builtin backend
+    d = _design(domains=("DM", "MH"))  # MH can't be produced by the builtin backend
     out = generate_dataset(d, subjects=8, seed=1, out_root=tmp_path)
-    assert (out / "dm.csv").exists() and not (out / "eg.csv").exists()
+    assert (out / "dm.csv").exists() and not (out / "mh.csv").exists()
     report = validate_dataset(d, out)
     assert not report.passed
-    assert any(f.check == "coverage" and f.domain == "EG" for f in report.findings)
+    assert any(f.check == "coverage" and f.domain == "MH" for f in report.findings)
 
 
 # ---------------------------------------------------------------- anomaly edge cases
