@@ -38,7 +38,8 @@ class LoopResult:
 def run_loop(protocol_path: str | Path, *, subjects: int, seed: int,
              out_root: str | Path = "data/output", backend: str = "builtin",
              max_repairs: int = 2, model: str = MODEL_REASON,
-             narrate: Optional[Narrator] = None, use_cache: bool = True) -> LoopResult:
+             narrate: Optional[Narrator] = None, use_cache: bool = True,
+             ground_ae: bool = False) -> LoopResult:
     say = narrate or _default_narrator
 
     say("🧬  Reading protocol ...")
@@ -50,6 +51,20 @@ def run_loop(protocol_path: str | Path, *, subjects: int, seed: int,
         design.population.n_subjects = subjects
     say(f"    → {design.study_id}: {len(design.arms)} arms, {len(design.visits)} visits, "
         f"{len(design.endpoints)} endpoints, {len(design.domains)} domains")
+
+    # Opt-in OpenFDA AE grounding — DESIGN TIME ONLY. The fetched real-world AE frequencies are
+    # stored as data on the design (and thus in the manifest); the generator samples them
+    # deterministically. Never blocks the loop — an empty result falls back to the built-in profile.
+    if ground_ae:
+        from .grounding import ground_design
+        say("🌐  Grounding adverse events in OpenFDA (real-world frequencies) ...")
+        design.grounded_ae = ground_design(design)
+        if design.grounded_ae:
+            top = design.grounded_ae[0]
+            say(f"    → grounded {len(design.grounded_ae)} AE terms "
+                f"(top: {top.term} ×{top.count})")
+        else:
+            say("    → no OpenFDA match; using the built-in AE profile")
 
     repair_attempts = 0
     while True:

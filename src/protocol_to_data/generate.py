@@ -462,13 +462,23 @@ def code_term(verbatim: str, dictionary: dict[str, str]) -> str:
 def _gen_ae(design: ProtocolDesign, subs: list[dict], rng: random.Random, profile: str) -> pd.DataFrame:
     dictionary = _AE_DICTIONARY[profile]
     verbatims = list(dictionary)
+    # OpenFDA-grounded path (opt-in; attached to the design at DESIGN time, never fetched here):
+    # sample real-world MedDRA PTs weighted by report frequency. Strict AETERM == AEDECOD == PT
+    # (the OpenFDA term is already a Preferred Term). Deterministic given (seed, grounded weights) —
+    # the generator stays network-free. Empty grounding ⇒ the built-in dictionary path below.
+    grounded_terms = [g.term for g in design.grounded_ae]
+    grounded_weights = [g.count for g in design.grounded_ae]
     rows = []
     for s in subs:
         seq = 0
         for _ in range(rng.randint(0, 3)):
             seq += 1
-            verbatim = rng.choice(verbatims)
-            decod = code_term(verbatim, dictionary)  # reported term → MedDRA-coded term
+            if grounded_terms:
+                term = rng.choices(grounded_terms, weights=grounded_weights, k=1)[0]
+                verbatim, decod = term, term
+            else:
+                verbatim = rng.choice(verbatims)
+                decod = code_term(verbatim, dictionary)  # reported term → MedDRA-coded term
             # Onset on/after first dose — the loop's repair step depends on this invariant.
             onset = s["RFSTDTC"] + timedelta(days=rng.randint(1, 90))
             rows.append({

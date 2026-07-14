@@ -46,7 +46,7 @@ def cmd_run(a: argparse.Namespace) -> int:
     reset_usage()  # start this run's token/cost tally
     result = run_loop(a.protocol, subjects=a.subjects, seed=a.seed,
                       out_root=a.out_root, backend=a.backend, max_repairs=a.max_repairs,
-                      use_cache=not a.no_cache)
+                      use_cache=not a.no_cache, ground_ae=a.ground_ae)
     print(f"\n📁  Dataset → {result.output_dir}")
     print(f"    repairs: {result.repair_attempts} · validation passed: {result.report.passed}")
 
@@ -148,6 +148,8 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--backend", choices=["builtin", "engine-bridge"], default="builtin")
     r.add_argument("--max-repairs", type=int, default=2)
     r.add_argument("--anomalies", type=int, default=0, help="inject+detect K anomalies after run")
+    r.add_argument("--ground-ae", action="store_true",
+                   help="ground adverse events in real-world OpenFDA frequencies (opt-in)")
     r.add_argument("--no-cache", action="store_true",
                    help="skip the extraction cache — force a fresh Claude call (e.g. live demos)")
     r.set_defaults(func=cmd_run)

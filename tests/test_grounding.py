@@ -67,3 +67,58 @@ def test_ground_design_returns_first_nonempty(monkeypatch):
     out = grounding.ground_design(d)
     assert len(out) == 1 and out[0].term == "Nausea"
     assert calls[0] == "Docetaxel 75 mg" and "Docetaxel" in calls        # cascade tried in order
+
+
+# --- Phase 2+3: grounded weighted generation + loop wiring (offline, no Claude) ---
+
+def _grounded_design():
+    from protocol_to_data.schemas import DomainPlan, Population, Visit
+    return ProtocolDesign(
+        study_id="GRD-1", therapeutic_area="oncology",
+        arms=[Arm(name="Docetaxel", is_placebo=False), Arm(name="Placebo", is_placebo=True)],
+        visits=[Visit(name="Baseline", day=1)],
+        population=Population(n_subjects=20),
+        domains=[DomainPlan(domain="DM"), DomainPlan(domain="AE")],
+        grounded_ae=[AEGrounding(term="Neutropenia", count=500),
+                     AEGrounding(term="Nausea", count=300), AEGrounding(term="Alopecia", count=200)],
+    )
+
+
+def test_gen_ae_uses_grounded_terms_strict_pt_and_deterministic(tmp_path):
+    import pandas as pd
+
+    from protocol_to_data import generate
+    d1 = generate.generate_dataset(_grounded_design(), subjects=20, seed=42, out_root=tmp_path / "a")
+    d2 = generate.generate_dataset(_grounded_design(), subjects=20, seed=42, out_root=tmp_path / "b")
+    ae1, ae2 = pd.read_csv(Path(d1) / "ae.csv"), pd.read_csv(Path(d2) / "ae.csv")
+    assert len(ae1) > 0
+    assert set(ae1["AETERM"]) <= {"Neutropenia", "Nausea", "Alopecia"}   # grounded terms only
+    assert (ae1["AETERM"] == ae1["AEDECOD"]).all()                       # strict AETERM == AEDECOD == PT
+    assert ae1.equals(ae2)                                               # 100% deterministic on --seed
+
+
+def test_run_loop_grounds_ae_when_enabled_and_captures_in_manifest(tmp_path, monkeypatch):
+    from protocol_to_data import grounding, loop
+    design = _grounded_design()
+    design.grounded_ae = []  # start empty; grounding should populate it
+    monkeypatch.setattr(loop, "extract_design", lambda *a, **k: design)
+    monkeypatch.setattr(loop, "sha256_of", lambda p: "deadbeef")
+    monkeypatch.setattr(grounding, "ground_design",
+                        lambda d, **k: [AEGrounding(term="Nausea", count=10)])
+    res = loop.run_loop("proto.md", subjects=6, seed=42, out_root=tmp_path, ground_ae=True)
+    assert res.design.grounded_ae and res.design.grounded_ae[0].term == "Nausea"
+    assert res.manifest.design.grounded_ae[0].term == "Nausea"          # provenance in the manifest
+
+
+def test_run_loop_skips_grounding_by_default(tmp_path, monkeypatch):
+    from protocol_to_data import grounding, loop
+    design = _grounded_design()
+    design.grounded_ae = []
+    monkeypatch.setattr(loop, "extract_design", lambda *a, **k: design)
+    monkeypatch.setattr(loop, "sha256_of", lambda p: "deadbeef")
+
+    def boom(*a, **k):
+        raise AssertionError("ground_design must NOT run when ground_ae is False")
+    monkeypatch.setattr(grounding, "ground_design", boom)
+    res = loop.run_loop("proto.md", subjects=6, seed=42, out_root=tmp_path)  # ground_ae defaults False
+    assert res.design.grounded_ae == []
