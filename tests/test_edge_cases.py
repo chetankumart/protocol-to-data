@@ -187,3 +187,24 @@ def test_inverted_age_range_does_not_crash(tmp_path):
     out = generate_dataset(d, subjects=8, seed=1, out_root=tmp_path)
     ages = pd.read_csv(out / "dm.csv")["AGE"]
     assert ages.between(20, 80).all()   # range auto-sorted, values sane
+
+
+def test_pdf_text_bounded_stops_early_and_flushes_memory():
+    # Large-PDF OOM guard: parse only enough pages for the extractor, releasing each page's cache.
+    from protocol_to_data.ingest import _pdf_text_bounded
+
+    flushed = []
+
+    class _Page:
+        def __init__(self, i):
+            self.i = i
+
+        def extract_text(self):
+            return "x" * 1000
+
+        def flush_cache(self):
+            flushed.append(self.i)
+
+    text = _pdf_text_bounded((_Page(i) for i in range(500)), cap=5000)
+    assert 5000 <= len(text) < 6000      # ~5 pages of 1000 chars, NOT all 500
+    assert flushed == [0, 1, 2, 3, 4]    # stopped early and flushed each parsed page
