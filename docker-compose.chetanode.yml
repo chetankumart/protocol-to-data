@@ -1,0 +1,12 @@
+# ChetanNode overlay — host networking.
+#
+# The ThinkCentre's default Docker *bridge* network has no outbound route (firewall/routing), so a
+# bridged container can't reach api.anthropic.com (`Network is unreachable`) — but the host can.
+# Running on the *host* network (like open-webui / cloudflared already do) restores egress AND lets
+# the host-network cloudflared tunnel reach the app at localhost:7860.
+#
+# Usage:  docker compose -f docker-compose.yml -f docker-compose.chetanode.yml up -d --build
+services:
+  protocol-to-data:
+    network_mode: host
+    ports: !reset []        # host networking is incompatible with published ports; clear the base's

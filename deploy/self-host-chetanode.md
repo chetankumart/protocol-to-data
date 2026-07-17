@@ -14,23 +14,40 @@ generation (SDTM synthetic data) ──────▶ deterministic Python, on 
 > the reasoning steps use Claude (chosen for extraction fidelity). No GPU / Ollama dependency.
 > RAM: comfortable on the ThinkCentre; the 512 MB Render OOM does not apply here.
 
-## Prerequisites (yours)
-1. **SSH key authorized** on ChetanNode: `ssh-copy-id -p 2222 -i ~/.ssh/id_ed25519.pub chetankumart@192.168.1.172`
-2. An **`ANTHROPIC_API_KEY`**.
-3. Know your **tunnel management model** — locally-managed (`~/.cloudflared/config.yml`) or
-   dashboard-managed (Cloudflare Zero Trust → Networks → Tunnels). Both are covered below.
+## Prerequisites
+1. **SSH access.** ChetanNode is **key-only** (password auth disabled). The authorized key is
+   `~/.ssh/id_ed25519`, which is **passphrase-protected**; the passphrase lives in this repo's
+   `.env` as `SSH_KEY` (under `# Chetan Node`). Run remote commands via the helper
+   **`deploy/chetanode-ssh.sh 'cmd'`** — it unlocks the key from `.env` in a scoped temp file and
+   never prints it.
+2. An **`ANTHROPIC_API_KEY`** (in `.env`).
+3. The tunnel is **dashboard-managed** (a `cloudflared` container run with `--token`; no local
+   `config.yml`), so the public hostname is added in the Cloudflare Zero Trust dashboard (§2 Option B).
 
 ## 1. Run the container on ChetanNode
+Driven from your Mac (the helper reads the passphrase from `.env`):
 ```bash
-ssh -p 2222 chetankumart@192.168.1.172
-git clone https://github.com/chetankumart/protocol-to-data.git && cd protocol-to-data
-printf 'ANTHROPIC_API_KEY=sk-ant-...\n' > .env          # runtime secret, never committed
-docker compose up -d --build                            # builds + runs on 127.0.0.1:7860
-curl -fsS http://localhost:7860/ >/dev/null && echo "app up on :7860"
-docker compose ps                                       # STATUS should show (healthy)
+# clone (or update) on the server
+bash deploy/chetanode-ssh.sh 'cd ~ && git clone https://github.com/chetankumart/protocol-to-data.git \
+  || (cd protocol-to-data && git fetch -q origin main && git reset --hard -q origin/main)'
+# write a minimal server .env — ONLY the API key, piped over SSH, never printed
+printf 'ANTHROPIC_API_KEY=%s\n' "$(grep -E '^ANTHROPIC_API_KEY=' .env | cut -d= -f2-)" \
+  | bash deploy/chetanode-ssh.sh 'umask 077; cat > ~/protocol-to-data/.env'
+# build + run on the HOST network (see below)
+bash deploy/chetanode-ssh.sh 'cd ~/protocol-to-data &&
+  docker compose -f docker-compose.yml -f docker-compose.chetanode.yml up -d --build'
+# verify
+bash deploy/chetanode-ssh.sh 'curl -fsS http://localhost:7860/ >/dev/null && echo up; \
+  docker inspect --format "{{.State.Health.Status}}" protocol-to-data'
 ```
-`docker-compose.yml` already publishes `7860:7860`, loads `.env`, and `restart: unless-stopped`;
-the image now ships a `HEALTHCHECK`.
+**Host networking is required.** The ThinkCentre's Docker *bridge* has no outbound route, so a
+bridged container can't reach `api.anthropic.com` (`Network is unreachable`) — the host can.
+`docker-compose.chetanode.yml` runs it on the **host network** (like open-webui / cloudflared),
+which restores egress *and* lets the host-network tunnel reach `localhost:7860`.
+`restart: unless-stopped` + a stdlib `HEALTHCHECK` are already set.
+
+> Optional: `echo "GIT_COMMIT=$(bash deploy/chetanode-ssh.sh 'cd ~/protocol-to-data && git rev-parse --short HEAD')"`
+> appended to the server `.env` makes the footer show the build SHA (verifiable deploys).
 
 ## 2. Expose it via the Cloudflare Tunnel
 
