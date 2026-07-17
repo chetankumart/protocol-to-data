@@ -108,3 +108,12 @@ Flag-off, or OpenFDA empty/unreachable, ⇒ **byte-identical to v1** (graceful f
    open are per-step parsing details inside the drug-name cascade (finalize during Phase 1).
 
 _Related: `docs/SUBMISSION.md` (v1 scope), persistent memory `protocol-to-data-v2-openfda-grounding`._
+
+---
+
+## Backlog / other future tickets
+
+- **Shared Protocol Extraction Library** — reuse a stored `ProtocolDesign` across users so a repeat
+  protocol skips the LLM extraction ($0). Design doc: `docs/FUTURE_SHARED_EXTRACTION_LIBRARY.md`.
+  **Governance-first** — it reopens the cross-user exposure that ephemeral compliance mode closed,
+  so v1 must be public-only (registry-verified) + opt-in. Build P0–P1 first.
