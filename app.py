@@ -322,7 +322,7 @@ def _protocol_source(use_sample: bool, protocol_url: str, file_path):
             yield file_path.name if hasattr(file_path, "name") else str(file_path)
         else:
             raise ValueError(
-                "No protocol provided — upload a file, paste a URL, or tick 'Use bundled sample'."
+                "No protocol provided — upload a file, paste a URL, or tick 'Use bundled sample protocol'."
             )
     finally:
         if tmp_path:
@@ -580,7 +580,7 @@ def build_ui():
                                           file_types=[".pdf", ".html", ".htm", ".md", ".txt"])
                         url_in = gr.Textbox(label="Or paste a Protocol URL (PDF/HTML/Text)",
                                             placeholder="https://...")
-                        use_sample = gr.Checkbox(label="Use bundled CARDIO-HF sample", value=True)
+                        use_sample = gr.Checkbox(label="Use bundled sample protocol", value=True)
                         gr.Markdown("<sub>Priority: Sample → URL → File upload.</sub>")
                         subjects = gr.Slider(4, 100, value=40, step=1, label="Subjects")
                         seed = gr.Number(value=42, precision=0, label="Seed (reproducible)",
