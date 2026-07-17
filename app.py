@@ -86,7 +86,7 @@ def execute(protocol_path: str, subjects: int, seed: int, anomalies: int):
                 truth = inject_anomalies(res.output_dir, count=int(anomalies), seed=int(seed))
                 for t in truth:
                     narrate(f"    • injected {t['type']} in {t['domain']} ({t.get('usubjid')})")
-                narrate("🔎  Claude detecting ...")
+                narrate("🔎  Running automated anomaly detection ...")
                 findings = detect_anomalies(res.design, res.output_dir)
                 for f in findings:
                     narrate(f"    • [{f.anomaly_type}] {f.domain}: {f.description}")
@@ -238,7 +238,7 @@ def _render_crosscheck(extracted: dict, nct_id: str | None) -> str:
         f"**Extracted design vs. [ClinicalTrials.gov {reg['nct_id']}]"
         f"(https://clinicaltrials.gov/study/{reg['nct_id']}) — read-only**",
         "",
-        "| Field | Extracted (Claude) | Registry (CTG) | |",
+        "| Field | Extracted (Pipeline) | Registry (CTG) | |",
         "|---|---|---|---|",
         row("Phase", ph_e, ph_r, _phase_digits(ph_e) == _phase_digits(ph_r)),
         row("Number of arms", ar_e, ar_r, ar_e == ar_r),
@@ -406,7 +406,7 @@ _CTA_CSS = """
 # _SocialTagsMiddleware rewrites them in the ROOT html only, so WhatsApp/Slack/etc. show the project.
 _OG_IMAGE = "https://raw.githubusercontent.com/chetankumart/protocol-to-data/main/docs/img/ui_demo.png"
 _OG_DESC = ("Turn a clinical trial protocol into an analyzable synthetic SDTM dataset — one agentic "
-            "loop, driven by Claude. Then chat with the data.")
+            "validation loop. Then chat with the data.")
 _FAVICON_SVG = ("data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 "
                 "viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧬</text></svg>")
 _OG_REPLACEMENTS = [
@@ -509,9 +509,9 @@ def build_ui():
         gr.Markdown(
             "# 🧬 protocol-to-data\n"
             "**From a clinical trial protocol to an analyzable synthetic dataset — one agentic "
-            "loop, driven by Claude.** Upload a protocol (PDF / HTML / text), or use the bundled "
-            "sample, and watch Claude extract the design, generate SDTM-shaped data, validate, "
-            "and self-repair.\n\n"
+            "validation loop.** Upload a protocol (PDF / HTML / text), or use the bundled "
+            "sample, and watch the Validation Engine extract the design, generate SDTM-shaped "
+            "data, validate, and self-repair.\n\n"
             "**3 steps: Extract → Generate → Self-Validate.**"
         )
         out_dir_state = gr.State("")
@@ -564,7 +564,7 @@ def build_ui():
                 gr.Markdown(
                     "**Chat with your generated SDTM datasets.** Ask in plain English — a DuckDB "
                     "query runs directly against the on-disk data (memory-safe, no full-file "
-                    "loads), then Claude explains the result. Or **ask for a chart** — e.g. "
+                    "loads), then the Data Copilot explains the result. Or **ask for a chart** — e.g. "
                     "_'bar chart of subjects per arm'_, _'pie chart of sex'_ — to see it plotted. "
                     "_Run a protocol in the ⚙️ Pipeline tab first._\n\n"
                     "> **Demo Mode: Limited to 3 queries per run. Max 150 characters.**"

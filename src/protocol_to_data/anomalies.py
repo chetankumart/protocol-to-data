@@ -121,7 +121,7 @@ def _inject_dose_response_reversal(data_dir: Path, rng) -> dict | None:
 
 def detect_anomalies(design: ProtocolDesign, data_dir: str | Path, *,
                      model: str = MODEL_REASON, sample_rows: int = 25) -> list[AnomalyFinding]:
-    """Claude reads dataset samples and returns anomaly findings (structured output)."""
+    """The Validation Engine reads dataset samples and returns anomaly findings (structured output)."""
     data_dir = Path(data_dir)
     samples = []
     for p in sorted(data_dir.glob("*.csv")):
@@ -149,12 +149,13 @@ def scorecard_markdown(score: dict | None) -> str:
     """Render a scorecard dict as markdown (shared by the UI and run-history archive)."""
     if not score:
         return "_No anomaly loop run (set anomalies > 0)._"
-    lines = [f"### 🎯 Claude caught **{score['caught']}/{score['total']}** injected anomalies"]
+    lines = [f"### 🎯 Validation Engine caught **{score['caught']}/{score['total']}** injected anomalies"]
     if score["missed"]:
         lines.append("\n**Missed:**")
         lines += [f"- {t['type']} in {t['domain']} ({t.get('usubjid')})" for t in score["missed"]]
     if score["extra"]:
-        lines.append("\n**Extra findings** (beyond the planted defects — Claude reasoning about the data):")
+        lines.append("\n**Extra findings** (beyond the planted defects — autonomous plausibility "
+                     "review by the Validation Engine):")
         lines += [f"- [{f.anomaly_type}] {f.domain}: {f.description}" for f in score["extra"]]
     return "\n".join(lines)
 

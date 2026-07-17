@@ -124,13 +124,13 @@ def _run_anomalies(design, data_dir, *, count: int, seed: int) -> dict:
     for t in truth:
         print(f"    • injected {t['type']} in {t['domain']} ({t.get('usubjid')})")
 
-    print("🔎  Claude detecting ...")
+    print("🔎  Running automated anomaly detection ...")
     findings = detect_anomalies(design, data_dir)
     for f in findings:
         print(f"    • [{f.anomaly_type}] {f.domain}: {f.description}")
 
     score = score_detections(truth, findings)
-    print(f"\n🎯  Claude caught {score['caught']}/{score['total']} injected anomalies")
+    print(f"\n🎯  Validation Engine caught {score['caught']}/{score['total']} injected anomalies")
     for t in score["missed"]:
         print(f"    • MISSED {t['type']} in {t['domain']} ({t.get('usubjid')})")
     return score
@@ -151,14 +151,14 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--ground-ae", action="store_true",
                    help="ground adverse events in real-world OpenFDA frequencies (opt-in)")
     r.add_argument("--no-cache", action="store_true",
-                   help="skip the extraction cache — force a fresh Claude call (e.g. live demos)")
+                   help="skip the extraction cache — force a fresh extraction pass (e.g. live demos)")
     r.set_defaults(func=cmd_run)
 
     e = sub.add_parser("extract", help="protocol → design.json")
     e.add_argument("protocol")
     e.add_argument("-o", "--output")
     e.add_argument("--no-cache", action="store_true",
-                   help="skip the extraction cache — force a fresh Claude call")
+                   help="skip the extraction cache — force a fresh extraction pass")
     e.set_defaults(func=cmd_extract)
 
     g = sub.add_parser("generate", help="design.json → CSVs")

@@ -64,7 +64,7 @@ def _load_cached_design(protocol_path: str | Path, say: Narrator) -> Optional[Pr
         design = ProtocolDesign.model_validate_json(fp.read_text(encoding="utf-8"))
     except Exception:  # noqa: BLE001 — a corrupt/stale cache entry is just a miss
         return None
-    say(f"    → cache hit — loaded design, skipped Claude extraction ({fp.name[:19]}…)")
+    say(f"    → cache hit — loaded design, skipped re-extraction ({fp.name[:19]}…)")
     return design
 
 
@@ -117,7 +117,7 @@ def _extract_via_json(prompt: str, *, model: str, say: Narrator) -> ProtocolDesi
         return ProtocolDesign.model_validate(
             complete_json(prompt, model=model, max_tokens=8000, think=True))
     except (ValidationError, ValueError) as e:
-        say("    → first extraction unparseable/invalid; asking Claude to correct it")
+        say("    → first extraction unparseable/invalid; requesting a corrected extraction")
         repair_prompt = (
             f"{prompt}\n\nYour previous response did not parse as valid JSON matching the "
             f"schema. Errors:\n{e}\n\nReturn corrected, valid JSON only — no prose, no fences."

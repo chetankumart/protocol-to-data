@@ -45,7 +45,7 @@ def run_loop(protocol_path: str | Path, *, subjects: int, seed: int,
     say("🧬  Reading protocol ...")
     proto_sha = sha256_of(protocol_path)
 
-    say("🧩  Extracting design (Claude) ...")
+    say("🧩  Extracting protocol design (Validation Engine) ...")
     design = extract_design(protocol_path, model=model, narrate=say, use_cache=use_cache)
     if subjects:
         design.population.n_subjects = subjects
@@ -89,7 +89,7 @@ def run_loop(protocol_path: str | Path, *, subjects: int, seed: int,
             break
 
         repair_attempts += 1
-        say(f"🔧  Repairing (Claude, attempt {repair_attempts}/{max_repairs}) ...")
+        say(f"🔧  Repairing design (Validation Engine, attempt {repair_attempts}/{max_repairs}) ...")
         design = _repair_design(design, report, model=model, say=say)
 
     manifest = RunManifest(
