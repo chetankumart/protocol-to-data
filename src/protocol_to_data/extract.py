@@ -111,15 +111,19 @@ def _extract_via_json(prompt: str, *, model: str, say: Narrator) -> ProtocolDesi
     (JSONDecodeError ⊂ ValueError) OR schema-invalid (ValidationError), one repair pass feeds
     the error back to Claude. A second failure is allowed to surface rather than fake a design.
     """
+    # Extraction is the core reasoning step → adaptive extended thinking (think=True). max_tokens
+    # is raised to leave headroom for the thinking budget on top of the JSON output.
     try:
-        return ProtocolDesign.model_validate(complete_json(prompt, model=model, max_tokens=6000))
+        return ProtocolDesign.model_validate(
+            complete_json(prompt, model=model, max_tokens=8000, think=True))
     except (ValidationError, ValueError) as e:
         say("    → first extraction unparseable/invalid; asking Claude to correct it")
         repair_prompt = (
             f"{prompt}\n\nYour previous response did not parse as valid JSON matching the "
             f"schema. Errors:\n{e}\n\nReturn corrected, valid JSON only — no prose, no fences."
         )
-        return ProtocolDesign.model_validate(complete_json(repair_prompt, model=model, max_tokens=6000))
+        return ProtocolDesign.model_validate(
+            complete_json(repair_prompt, model=model, max_tokens=8000, think=True))
 
 
 def normalize_design(design: ProtocolDesign) -> ProtocolDesign:

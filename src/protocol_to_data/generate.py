@@ -139,6 +139,11 @@ def _generate_builtin(design: ProtocolDesign, *, subjects: int, seed: int,
     _enforce_referential_integrity(frames)  # drop orphans + assert before writing
 
     for name, df in frames.items():
+        # Never write a column-less frame: to_csv would emit a ~0-byte file that pandas/DuckDB
+        # then choke on (EmptyDataError). A domain that produced no columns is simply not written
+        # → the coverage check flags it → the loop repairs. Robust for messy real-world protocols.
+        if df.shape[1] == 0:
+            continue
         df.to_csv(out_dir / f"{name}.csv", index=False)
     return out_dir
 
@@ -182,8 +187,10 @@ def _enforce_referential_integrity(frames: dict[str, pd.DataFrame]) -> None:
 
 def _make_subjects(design: ProtocolDesign, n: int, rng: random.Random) -> list[dict]:
     arms = design.arms or [type("A", (), {"name": "TREATMENT", "is_placebo": False})()]
-    lo, hi = design.population.age_range
-    sex_pool = {"all": ["M", "F"], "female": ["F"], "male": ["M"]}[design.population.sex]
+    lo, hi = sorted(design.population.age_range)   # defensive: a messy extraction can invert the
+    lo = max(lo, 0)                                # range (hi<lo → randint crash) or emit negatives
+    sex_pool = {"all": ["M", "F"], "female": ["F"], "male": ["M"]}.get(
+        design.population.sex, ["M", "F"])         # fall back to all-sex on an unexpected value
     subs = []
     for i in range(n):
         arm = arms[i % len(arms)]

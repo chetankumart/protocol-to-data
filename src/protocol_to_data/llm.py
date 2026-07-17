@@ -77,8 +77,13 @@ _SAMPLING_REMOVED = {
 
 
 def complete(prompt: str, *, model: str = MODEL_REASON, max_tokens: int = 4096,
-             system: str | None = None) -> str:
-    """Return Claude's text response for a single-turn prompt."""
+             system: str | None = None, think: bool = False) -> str:
+    """Return Claude's text response for a single-turn prompt.
+
+    `think=True` turns on **adaptive extended thinking** on the reasoning models (Opus 4.x /
+    Sonnet 5 / Fable 5) — used for the reasoning-heavy steps (extraction, self-repair). Thinking
+    blocks are dropped from the return; only the text (e.g. the JSON design) comes back.
+    """
     client = _client()
     kwargs: dict[str, Any] = dict(model=model, max_tokens=max_tokens,
                                   messages=[{"role": "user", "content": prompt}])
@@ -86,6 +91,10 @@ def complete(prompt: str, *, model: str = MODEL_REASON, max_tokens: int = 4096,
         kwargs["system"] = system
     if model not in _SAMPLING_REMOVED:
         kwargs["temperature"] = 0.0  # deterministic extraction on models that accept sampling
+    elif think:
+        # Adaptive thinking is only offered on the sampling-removed reasoning models; `budget_tokens`
+        # is rejected there, so we pass the adaptive form (and never mix it with temperature).
+        kwargs["thinking"] = {"type": "adaptive"}
     resp = client.messages.create(**kwargs)
     _record_usage(model, getattr(resp, "usage", None))
     return "".join(block.text for block in resp.content if getattr(block, "type", None) == "text")
@@ -113,12 +122,14 @@ def parse_model(prompt: str, schema: type[T], *, model: str = MODEL_REASON,
     return resp.parsed_output
 
 
-def complete_json(prompt: str, *, model: str = MODEL_REASON, max_tokens: int = 4096) -> dict:
+def complete_json(prompt: str, *, model: str = MODEL_REASON, max_tokens: int = 4096,
+                  think: bool = False) -> dict:
     """Call Claude and parse the response as JSON.
 
-    Robust to models that wrap JSON in ```json fences or add stray prose.
+    Robust to models that wrap JSON in ```json fences or add stray prose. `think=True` enables
+    adaptive extended thinking for reasoning-heavy calls (extraction / repair).
     """
-    text = complete(prompt, model=model, max_tokens=max_tokens,
+    text = complete(prompt, model=model, max_tokens=max_tokens, think=think,
                     system="You output only valid JSON. No markdown, no prose.")
     return _extract_json(text)
 

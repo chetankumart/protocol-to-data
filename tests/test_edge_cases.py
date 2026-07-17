@@ -179,3 +179,11 @@ def test_validate_tolerates_empty_csv(tmp_path):
     report = validate_dataset(d, tmp_path)  # must not raise
     assert not report.passed
     assert any(f.domain == "PC" for f in report.findings)
+
+
+def test_inverted_age_range_does_not_crash(tmp_path):
+    # A messy extraction can invert the age range; generation must not raise (randint(hi,lo) would).
+    d = _design(population=Population(n_subjects=8, age_range=(80, 20)))
+    out = generate_dataset(d, subjects=8, seed=1, out_root=tmp_path)
+    ages = pd.read_csv(out / "dm.csv")["AGE"]
+    assert ages.between(20, 80).all()   # range auto-sorted, values sane
