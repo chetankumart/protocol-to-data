@@ -124,6 +124,13 @@ def _generate_builtin(design: ProtocolDesign, *, subjects: int, seed: int,
 
     _enforce_referential_integrity(frames)  # drop orphans + assert before writing
 
+    # Expand the lean frames to full CDISC SDTM breadth (DOMAIN, --STRESN/--STRESC/--STRESU,
+    # --BLFL, --DY, --TEST, LB reference ranges, DM/AE/EX/CM context). Adds columns only —
+    # deterministic, never touches the RNG-driven clinical values. Done after integrity so it
+    # enriches only the rows that will actually be written.
+    from .enrich import enrich_frames
+    enrich_frames(frames, design, subs)
+
     for name, df in frames.items():
         # Never write a column-less frame: to_csv would emit a ~0-byte file that pandas/DuckDB
         # then choke on (EmptyDataError). A domain that produced no columns is simply not written

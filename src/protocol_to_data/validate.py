@@ -11,19 +11,21 @@ import pandas as pd
 
 from .schemas import ProtocolDesign, ValidationFinding, ValidationReport
 
+# Required columns per domain. DOMAIN is universal; findings domains must carry the standardized
+# result (--STRESC) the enrichment layer derives, so validation enforces the full SDTM shape.
 REQUIRED_COLUMNS = {
-    "dm": {"STUDYID", "USUBJID", "ARM", "AGE", "SEX", "RFSTDTC"},
-    "vs": {"USUBJID", "VSTESTCD", "VSORRES", "VSDTC"},
-    "lb": {"USUBJID", "LBTESTCD", "LBORRES", "LBDTC"},
-    "qs": {"USUBJID", "QSTESTCD", "QSORRES", "QSDTC"},
-    "rs": {"USUBJID", "RSTESTCD", "RSORRES", "RSDTC"},
-    "ae": {"USUBJID", "AETERM", "AEDECOD", "AESTDTC"},   # AEDECOD = MedDRA-coded term
-    "cm": {"USUBJID", "CMTRT", "CMDECOD", "CMSTDTC"},    # CMDECOD = WHODrug-coded name
-    "ex": {"USUBJID", "EXTRT", "EXSTDTC"},
-    "eg": {"USUBJID", "EGTESTCD", "EGORRES", "EGDTC"},   # ECG
-    "pc": {"USUBJID", "PCTESTCD", "PCORRES", "PCDTC"},   # PK concentrations
-    "tu": {"USUBJID", "TUTESTCD", "TUORRES", "TUDTC"},   # RECIST tumor identification
-    "tr": {"USUBJID", "TRTESTCD", "TRORRES", "TRDTC"},   # RECIST tumor results
+    "dm": {"STUDYID", "DOMAIN", "USUBJID", "ARM", "ARMCD", "AGE", "SEX", "RFSTDTC"},
+    "vs": {"DOMAIN", "USUBJID", "VSTESTCD", "VSORRES", "VSSTRESC", "VSDTC"},
+    "lb": {"DOMAIN", "USUBJID", "LBTESTCD", "LBORRES", "LBSTRESC", "LBNRIND", "LBDTC"},
+    "qs": {"DOMAIN", "USUBJID", "QSTESTCD", "QSORRES", "QSSTRESC", "QSDTC"},
+    "rs": {"DOMAIN", "USUBJID", "RSTESTCD", "RSORRES", "RSSTRESC", "RSDTC"},
+    "ae": {"DOMAIN", "USUBJID", "AETERM", "AEDECOD", "AEBODSYS", "AESTDTC"},  # AEDECOD = MedDRA PT
+    "cm": {"DOMAIN", "USUBJID", "CMTRT", "CMDECOD", "CMSTDTC"},   # CMDECOD = WHODrug-coded name
+    "ex": {"DOMAIN", "USUBJID", "EXTRT", "EXDOSE", "EXSTDTC"},
+    "eg": {"DOMAIN", "USUBJID", "EGTESTCD", "EGORRES", "EGSTRESC", "EGDTC"},   # ECG
+    "pc": {"DOMAIN", "USUBJID", "PCTESTCD", "PCORRES", "PCSTRESC", "PCDTC"},   # PK concentrations
+    "tu": {"DOMAIN", "USUBJID", "TUTESTCD", "TUORRES", "TUDTC"},   # RECIST tumor identification
+    "tr": {"DOMAIN", "USUBJID", "TRTESTCD", "TRORRES", "TRSTRESC", "TRDTC"},   # RECIST tumor results
 }
 
 VITAL_BOUNDS = {"SYSBP": (60, 260), "DIABP": (30, 160), "PULSE": (30, 200)}
