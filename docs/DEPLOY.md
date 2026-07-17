@@ -54,8 +54,9 @@ sets `ANTHROPIC_API_KEY` as a Space secret via the API. The Space's own `README.
 the Gradio SDK header (`sdk: gradio`, `app_file: app.py`); `app.py` sees `SPACE_ID` and binds
 `0.0.0.0:7860` automatically. Requires a **write-scoped** HF token in `.env` as `HF_TOKEN`.
 
-> Cost note: the semantic cache lives on the host's ephemeral disk; a fresh rebuild clears it.
-> The $200 API credits cover judge traffic comfortably (a full run ≈ $0.2–0.3).
+> Cost note: on the hosted deployments the extraction cache is disabled (ephemeral mode — see §4),
+> so each run pays for a fresh extraction. The $200 API credits cover judge traffic comfortably
+> (a full run ≈ $0.2–0.3).
 
 ---
 
@@ -102,3 +103,21 @@ pip install ".[phi]"            # optional: adds Presidio NER for names / locati
 With the `[phi]` extra installed, Microsoft Presidio's recognizers additionally redact
 free-text PERSON / LOCATION / DATE_TIME entities; the regex tier always runs as a backstop.
 See `src/protocol_to_data/sanitize.py`.
+
+## 4. Ephemeral (compliance) mode
+
+```bash
+export PTD_EPHEMERAL=1     # store nothing protocol-derived on the server
+```
+
+**On by default for the hosted deployments** — the `Dockerfile` sets `PTD_EPHEMERAL=1`, so every
+container run (Render + self-hosted) is ephemeral; a local `python app.py` leaves it unset and
+keeps the convenient dev persistence (cache + `runs/` history). When on, a run:
+
+- writes generated data to a **per-session OS-temp dir** (swept after ~3h), never under the app dir
+- **disables the extraction cache** (`.cache`) — no protocol design metadata persists
+- **skips the `runs/` history archive** and **hides the shared "Load a previous run" dropdown**
+  (which would otherwise expose one user's uploaded-protocol run to the next visitor)
+
+Only the session download ZIP survives. A public protocol the user uploads is processed as-is —
+the guarantee is about server-side *retention*, not masking. See `app.py` `_ephemeral`.

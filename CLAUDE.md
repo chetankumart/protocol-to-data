@@ -20,7 +20,7 @@ optionally **inject + detect anomalies** (Claude). See `docs/ARCHITECTURE.md`.
 ## Layout
 ```
 cli.py                     # ptd entry point (run/extract/generate/validate/anomalies)
-src/protocol_to_data/      # ingest, extract, generate, validate, anomalies, loop, llm, schemas
+src/protocol_to_data/      # ingest, extract, generate, enrich, validate, anomalies, loop, llm, schemas
 prompts/                   # extract_design.md, detect_anomalies.md
 docs/                      # IDEA, ARCHITECTURE, SPEC, BUILD_PLAN, DEMO_SCRIPT
 examples/sample_protocol.md

@@ -104,12 +104,17 @@ Two subsystems sit *after* the loop and never influence generation:
 
 `generate.py` supports two backends selected by config/flag:
 
-1. **`builtin`** (default, in-repo): a lean, dependency-light, **therapeutic-area-aware**
-   generator that produces DM/VS/LB/QS/AE/EX (+ RS for oncology) with plausible clinical
-   values. It picks a clinical profile from the design's indication — a **cardiology**
-   default (NT-proBNP/KCCQ/NYHA) and an **oncology** profile (NSCLC lab panel + PK,
-   QLQ-C30/LC13 + EQ-5D-5L, arm-exact dosing, RECIST response) — so the same loop generates
-   indication-appropriate data. Good enough to demo the loop across therapeutic areas.
+1. **`builtin`** (default, in-repo): a dependency-light, **therapeutic-area-aware**
+   generator that produces up to 12 SDTM domains — DM/VS/LB/QS/AE/EX/CM/EG plus PC (PK
+   concentrations) and RS/TU/TR (RECIST) for oncology — with plausible clinical values. It
+   picks a clinical profile from the design's indication: a **cardiology** default
+   (NT-proBNP/KCCQ/NYHA) and an **oncology** profile (NSCLC lab panel, PK in the dedicated
+   **PC** domain, QLQ-C30/LC13 + EQ-5D-5L, arm-exact dosing, RECIST tumor response) — so the
+   same loop generates indication-appropriate data. A post-generation **enrichment layer**
+   (`enrich.py`) then expands every domain to full CDISC SDTM breadth (DOMAIN, standardized
+   results `--STRESC/--STRESN/--STRESU`, baseline flags, study day, LB reference ranges +
+   `--NRIND`, and DM/AE/EX/CM context variables) — deterministically, so output stays
+   reproducible.
 2. **`engine-bridge`** (optional): shells out to the author's production engine
    (`protocol-synthetic-data-generation/scripts/engine.py`) for full 32-domain,
    clinically-rich output. Marked `ENGINE BRIDGE` in code; **not required** for the demo.

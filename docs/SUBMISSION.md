@@ -5,7 +5,7 @@
 **Repo:** https://github.com/chetankumart/protocol-to-data
 **🔗 Live demo:** **https://protocol-to-data.onrender.com** _(Render free tier — first load may take ~30–60 s to wake, then it's snappy)_
 **🎥 Demo video:** https://youtu.be/JJXIagmZX3Q
-**Run it:** CLI — `ptd run examples/sample_protocol.md --subjects 40 --seed 42 --anomalies 5` · Web UI — `python app.py` · MCP — `python mcp_server.py` (Claude Desktop / any MCP client) · API — `gradio_client` → `generate_synthetic_data` (JSON) or `download_synthetic_data` (ZIP)
+**Run it:** CLI — `ptd run examples/sample_protocol.md --subjects 40 --seed 42 --anomalies 3` · Web UI — `python app.py` · MCP — `python mcp_server.py` (Claude Desktop / any MCP client) · API — `gradio_client` → `generate_synthetic_data` (JSON) or `download_synthetic_data` (ZIP)
 
 > **Note:** The live demo is hosted on a free Render tier (512MB RAM). It perfectly runs the bundled CARDIO-HF sample for evaluation. If you wish to test the full PDF extraction engine with massive protocols, please run the provided Docker container locally to avoid cloud out-of-memory limits.
 
@@ -52,16 +52,18 @@ UI (`app.py`). Drop in a protocol (PDF/HTML/text) and:
 2. **Extract** *(Claude)* — read the prose and emit a typed `ProtocolDesign`: arms, visits
    (days relative to first dose, with windows), endpoints mapped to SDTM domains, population,
    inclusion/exclusion, and an explicit list of assumptions it had to make.
-3. **Generate** — produce statistically plausible, SDTM-shaped synthetic CSVs
-   (DM/VS/LB/QS/AE/EX), deterministic with `--seed`.
+3. **Generate** — produce statistically plausible, full-breadth SDTM CSVs across up to 12
+   domains (DM/VS/LB/QS/AE/EX/CM/EG/PC/RS/TU/TR), deterministic with `--seed`.
 4. **Validate** — schema, referential integrity, temporal rules (no pre-dose AEs),
    physiologic ranges, and **planned-domain coverage**.
 5. **Repair** *(Claude)* — on any validation failure, Claude reads the report and adjusts the
    design (e.g. remaps or drops a domain the generator can't produce, noting it in
    assumptions), then regenerates. Bounded retries; it surfaces the report rather than fake success.
-6. **Anomaly loop** *(Claude)* — optionally inject controlled data-quality defects
-   (pre-dose AE, impossible vital, orphan record, duplicate visit, pregnancy-on-male) and have
-   a second Claude agent find and explain each one, scored against ground truth.
+6. **Anomaly loop** *(Claude)* — optionally inject controlled, **schema-valid but clinically
+   implausible** defects (a severe drug-class AE on the placebo arm, an all-severe severity
+   profile, a reversed dose-response) — defects deterministic validation passes, so only
+   pharmacological reasoning can catch them — and have the detector find and explain each one,
+   scored against ground truth.
 
 100% synthetic, zero PHI, reproducible with a seed.
 
@@ -79,27 +81,26 @@ The whole tool was **built with Claude Code** during the hackathon week.
 
 ## Proof it works (live runs)
 
-**Sample HFrEF protocol** — `examples/sample_protocol.md`:
+**Sample HFrEF protocol** — `examples/sample_protocol.md` (all planned domains are producible,
+so it validates clean without a repair pass):
 ```
-🧩 Extract ............ CARDIO-HF-P3: 2 arms, 6 visits, 6 endpoints, 7 domains (incl. EG)
-🔎 Validate ........... FAIL: planned domain EG has no generated data
-🔧 Repair (Claude) .... design adjusted (EG remapped/dropped, noted in assumptions)
-🔎 Re-validate ........ PASS — 0 errors across 6 domains
-🎯 Anomalies .......... Claude caught 5/5 injected defects
+🧩 Extract ............ CARDIO-HF-P3: 2 arms, 6 visits, 6 endpoints, 7 domains (incl. EG/ECG)
+🔎 Validate ........... PASS — 0 errors across 7 domains (DM/VS/LB/QS/AE/EX/EG)
+🎯 Anomalies .......... Validation Engine caught 3/3 injected defects
 ```
 
 **Real 179-page oncology protocol** — Amgen AMG 510 vs Docetaxel, NSCLC KRAS G12C
-(CodeBreak 200), fed as a PDF:
+(CodeBreak 200), fed as a PDF (this is where the repair loop earns its keep):
 ```
 🧩 Extract ............ 2 arms (correctly identified open-label active-control, no placebo),
                         13 cycle-based visits (C1D1/C1D8/C2D1… derived from 21-day cycles),
-                        19 endpoints, 14 domains
-🔎 Validate ........... FAIL: 8 oncology domains the builtin can't emit (RS/TU/TR/SU/PC/CM/MH/SS)
-🔧 Repair (Claude) .... dropped all 8 in one pass → PASS across 6 domains
-🎯 Anomalies .......... 5/5 caught — and the detector additionally flagged that the demo
-                        generator's cardiac instruments (KCCQ/NT-proBNP) don't fit an
-                        oncology indication (QLQ-C30/RECIST), reasoning about clinical
-                        plausibility beyond the planted defects.
+                        19 endpoints, ~14 domains
+🔎 Validate ........... FAIL: planned domains the builtin can't emit (e.g. SU/MH/SS/IS)
+🔧 Repair (Engine) .... remapped/dropped in one pass → PASS across 11 producible domains
+                        (DM/VS/LB/QS/AE/EX/EG/PC/RS/TU/TR)
+🎯 Anomalies .......... 3/3 caught — and the detector additionally flagged a grade-4 neutrophil
+                        count in the docetaxel arm as a real, treatment-emergent finding,
+                        reasoning about clinical plausibility beyond the planted defects.
 ```
 The loop generalizes from a toy protocol to a real, messy, 179-page oncology PDF without changes.
 
@@ -138,13 +139,18 @@ agentic orchestration — extraction, repair, detection — is what's new.
 Beyond the core loop, the app carries the systems-thinking a real deployment needs — built
 lean, but showing the shape of production:
 
-- **Semantic caching (cost efficiency).** Extraction is content-addressed by the document's
-  SHA-256 (`.cache/{hash}_extracted_design.json`). An identical protocol never pays for
-  extraction twice — a cold 25 s / one-API-call run becomes a warm **0.4 s / $0** run.
-  `--no-cache` forces a fresh call for live demos.
-- **Durable run history (state management).** Every run snapshots into `runs/<timestamp>/`
-  (SDTM CSVs + design + scorecard + meta). The UI's **"Load a previous run"** dropdown
-  restores the whole dashboard from any saved state — no re-running required.
+- **Ephemeral (compliance) mode.** `PTD_EPHEMERAL=1` (on by default for the hosted deployments)
+  stores **nothing protocol-derived on the server** — no extraction cache, no `runs/` archive
+  (the shared history dropdown is hidden, closing a cross-session exposure), per-session temp
+  output swept after a few hours. Only the download ZIP survives the session. A public protocol
+  the user uploads is processed as-is; the guarantee is server-side *retention*, not masking.
+- **Semantic caching (cost efficiency).** In local/dev mode, extraction is content-addressed by
+  the document's SHA-256 (`.cache/{hash}_extracted_design.json`) so an identical protocol never
+  pays for extraction twice — a cold 25 s / one-API-call run becomes a warm **0.4 s / $0** run
+  (`--no-cache` forces fresh; the cache is disabled under ephemeral mode).
+- **Durable run history (state management).** In local/dev mode, every run snapshots into
+  `runs/<timestamp>/` (SDTM CSVs + design + scorecard + meta); the UI's **"Load a previous run"**
+  dropdown restores the whole dashboard from any saved state (skipped under ephemeral mode).
 - **RBAC-aware architecture.** `rbac.py` delineates a **Clinical Data Manager** (write:
   run/generate/snapshot) from a **Statistician** (read-only: browse/restore), with the
   authorization injection points wired into the data-access and UI layers. Stubbed for the
@@ -173,7 +179,7 @@ lean, but showing the shape of production:
 - **Containerized + cloud-deployed (portability).** Ships a non-root `Dockerfile` +
   `docker-compose.yml`, and a `render.yaml` blueprint that hosts the same image on Render's free
   tier — **live at https://protocol-to-data.onrender.com** (verified end-to-end in the cloud:
-  self-repair + 5/5 anomalies + $-cost). `app.py` honors a platform-assigned `$PORT`
+  self-repair + 3/3 anomalies + $-cost). `app.py` honors a platform-assigned `$PORT`
   (`PORT > GRADIO_SERVER_PORT > 7860`), so Railway / Fly / Cloud Run run it unchanged. A
   **CI-gated deploy** (`.github/workflows/ci.yml`) ships only green builds via a Render deploy hook,
   and the UI footer shows the live build SHA for verifiable deploys.

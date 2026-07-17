@@ -27,13 +27,13 @@ ruff check . && pytest -q      # expect: All checks passed! · 140 passed
 | ENV-06 | `render.yaml` blueprint | inspect blueprint config | Docker runtime, free plan, `ANTHROPIC_API_KEY` `sync:false` secret | ✅ (`test_deploy`) |
 | ENV-07 | Host/port resolution | `_resolve_host` / `_resolve_port` under various env | 0.0.0.0 on SPACE_ID; platform `$PORT` wins over 7860 | ✅ (`test_deploy`) |
 | ENV-08 | Dockerfile cloud-ready | inspect Dockerfile | slim base, non-root, `GRADIO_SERVER_NAME=0.0.0.0`, reqs cached | ✅ (`test_deploy`) |
-| ENV-09 | Live cloud deploy | open `protocol-to-data.onrender.com` → run sample | full loop runs; 5/5 anomalies; $-cost logged | 👤 (verified: $0.18, 5/5) |
+| ENV-09 | Live cloud deploy | open `protocol-to-data.onrender.com` → run sample | full loop runs; 3/3 anomalies; $-cost logged | 👤 (verified: $0.18) |
 
 ## 2. CLI (`ptd`)
 
 | ID | Case | Command | Expected | Cov |
 |----|------|---------|----------|-----|
-| CLI-01 | Full loop | `ptd run examples/sample_protocol.md --seed 42 --anomalies 5` | extract → repair → PASS → 5/5 → cost line | 🔑👤 |
+| CLI-01 | Full loop | `ptd run examples/sample_protocol.md --seed 42 --anomalies 3` | extract → PASS → 3/3 → cost line | 🔑👤 |
 | CLI-02 | Extract only | `ptd extract examples/sample_protocol.md -o design.json` | valid `ProtocolDesign` JSON | 🔑👤 |
 | CLI-03 | Generate from design | `ptd generate design.json --subjects 20 --seed 42` | CSVs written | ✅ (`test_edge_cases`, `test_generate`) |
 | CLI-04 | Validate a dataset | `ptd validate data/output/<study>/synthetic_data/` | `"passed": true` on clean data | ✅ (`test_schemas`) |
@@ -84,7 +84,7 @@ ruff check . && pytest -q      # expect: All checks passed! · 140 passed
 | LOOP-01 | Self-repair converges | unproducible domain → repair drops it → PASS | ✅ (`test_loop`) |
 | LOOP-02 | Bounded repair | never fakes success; stops at `--max-repairs` | ✅ (`test_loop`) |
 | LOOP-03 | Manifest persisted | `run_manifest.json` + `validation_report.json` written | ✅ (`test_loop`) |
-| ANOM-01 | 5 defects injected + detected | scorecard "N/N caught" | ✅ inject/score (`test_anomalies`), 🔑 detect |
+| ANOM-01 | 3 clinical-plausibility defects injected + detected | scorecard "N/N caught" | ✅ inject/score (`test_anomalies`), 🔑 detect |
 | ANOM-02 | Scorecard matching | type+domain match; missed/extra tracked | ✅ (`test_anomalies`) |
 
 ## 7. Enterprise / efficiency
@@ -157,7 +157,7 @@ ruff check . && pytest -q      # expect: All checks passed! · 140 passed
 ## 9. Manual pre-submission smoke (do once before submitting)
 
 1. 👤 Fresh clone → `pip install -r requirements.txt` → `ruff check . && pytest -q` → **All green, 140 passed**.
-2. 🔑 `ptd run examples/sample_protocol.md --seed 42 --anomalies 5` → PASS + 5/5 + cost line.
+2. 🔑 `ptd run examples/sample_protocol.md --seed 42 --anomalies 3` → PASS + 3/3 + cost line.
 3. 🔑 `python app.py` → run sample in the browser → narration + data + scorecard + cost badge.
 4. 👤 `docker compose up` (or `podman-compose up`) → `localhost:7860` serves.
 5. 👤 Open **https://protocol-to-data.onrender.com** → run the sample end-to-end in the cloud.

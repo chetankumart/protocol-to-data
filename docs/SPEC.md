@@ -114,10 +114,19 @@ deterministic regex (email, phone, SSN, MRN, URL) always runs; `pip install ".[p
 Microsoft Presidio NER for PERSON / LOCATION / DATE_TIME. Off by default (protocols are
 design docs, usually PHI-free).
 
+### Ephemeral (compliance) mode
+`PTD_EPHEMERAL=1` (baked into the Dockerfile → **on for the hosted deployments**, off for a
+local `python app.py`) stores nothing protocol-derived on the server: no extraction cache, no
+`runs/` history archive (and the shared "Load a previous run" dropdown is hidden — it was a
+cross-session exposure), and generated data goes to a per-session OS-temp dir swept after a few
+hours. Only the session download ZIP survives. A public protocol the user uploads is processed
+as-is — the point is server-side *retention*, not masking.
+
 ### Enterprise seams
-Semantic extraction cache (SHA-256 content-addressed, `--no-cache` to force fresh) · run
-history snapshots (`runs/<timestamp>/`, restorable in the UI) · RBAC injection-point stubs
-(CDM write / Statistician read) · dictionary coding (`AEDECOD` MedDRA, `CMDECOD` WHODrug) ·
+Semantic extraction cache (SHA-256 content-addressed, `--no-cache` to force fresh; disabled in
+ephemeral mode) · run history snapshots (`runs/<timestamp>/`, restorable in the UI; skipped in
+ephemeral mode) · RBAC injection-point stubs (CDM write / Statistician read) · dictionary
+coding (`AEDECOD` MedDRA, `CMDECOD` WHODrug) ·
 per-run token + `$` cost accounting · Target Export Format selector (SDTM default + EDC stubs).
 
 ### Deployment
@@ -164,6 +173,6 @@ per-run token + `$` cost accounting · Target Export Format selector (SDTM defau
 
 - [x] `ptd run examples/sample_protocol.md --seed 42` completes with 0 validation errors.
 - [x] Extraction produces a sensible `ProtocolDesign` for the example (and for a real 179-page oncology PDF).
-- [x] At least DM, VS, AE domains generated with plausible values (DM/VS/LB/QS/AE/EX + RS for oncology).
-- [x] Anomaly loop injects ≥3 anomalies and Claude identifies all of them (5/5, verified locally **and** on the live cloud demo).
+- [x] Up to 12 SDTM domains generated with plausible values (DM/VS/LB/QS/AE/EX/CM/EG/PC + RS/TU/TR for oncology), enriched to full CDISC IG breadth.
+- [x] Anomaly loop injects 3 clinical-plausibility defects and the detector identifies all of them (3/3, verified locally **and** on the live cloud demo).
 - [x] Output is reproducible across two runs with the same seed.

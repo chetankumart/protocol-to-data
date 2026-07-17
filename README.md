@@ -23,16 +23,16 @@ Built for **[Built with Claude: Life Sciences](https://cerebralvalley.ai/e/built
 ## The magic moment
 
 ```
-$ ptd run examples/sample_protocol.md --subjects 40 --seed 42 --anomalies 5
+$ ptd run examples/sample_protocol.md --subjects 40 --seed 42 --anomalies 3
 
 🧬  Reading protocol ...
-🧩  Extracting design (Claude) ...       → CARDIO-HF-P3: 2 arms, 6 visits, 6 endpoints, 7 domains
+🧩  Extracting protocol design (Validation Engine) ... → ONC-101: 2 arms, 8 visits, 12 endpoints, 13 domains
 🏭  Generating synthetic data ...
     🔗  Integrity verified — no orphan USUBJID / VISITNUM before write
-🔎  Validating ...                       ⚠️  FAIL — planned domain EG has no generated data
-🔧  Repairing (Claude, attempt 1/2) ...  → design adjusted
-🔎  Validating ...                       ✅  PASS — 0 errors across 6 planned domains
-🎯  Claude caught 5/5 injected anomalies
+🔎  Validating ...                       ⚠️  FAIL — planned domain MH has no generated data
+🔧  Repairing design (Validation Engine, attempt 1/2) ...  → design adjusted
+🔎  Validating ...                       ✅  PASS — 0 errors across 12 planned domains
+🎯  Validation Engine caught 3/3 injected anomalies
 🪙  Run cost: $0.29 · 23,870 in / 6,458 out
 ```
 
@@ -48,8 +48,14 @@ Hybrid AI by design — **Claude reasons, deterministic Python generates**:
 - 🧠 **Claude for reasoning only** — extraction, self-repair, and anomaly detection. It never
   writes a data row, so it can't hallucinate structural data. (`generate.py` has zero LLM coupling.)
 - 🏭 **Therapeutic-area-aware generation** — a cardiology profile (NT-proBNP/KCCQ/NYHA) and an
-  oncology/NSCLC profile (hematology/chem/coag/thyroid + PK, QLQ-C30/LC13 + EQ-5D-5L, arm-exact
-  dosing, RECIST) selected deterministically from the protocol's indication.
+  oncology/NSCLC profile (hematology/chem/coag/thyroid, PK in the dedicated **PC** domain,
+  QLQ-C30/LC13 + EQ-5D-5L, arm-exact dosing, RECIST tumor response in RS/TU/TR) selected
+  deterministically from the protocol's indication.
+- 📐 **Full CDISC SDTM breadth** — a deterministic enrichment layer expands every domain to the
+  variable set a reviewer expects: `DOMAIN`, standardized results (`--STRESC/--STRESN/--STRESU`),
+  baseline flags (`--BLFL`), study day (`--DY`), LB reference ranges + `--NRIND`, and DM/AE/EX/CM
+  context (RACE, ARMCD, AEBODSYS, EXENDTC …). Derived from data already on the row, so output
+  stays byte-identical run-to-run.
 - 🔤 **Dictionary-coded SDTM** — `AEDECOD` (MedDRA) and `CMDECOD` (WHODrug) via a deterministic
   `code_term` mapper ("bad headache" → "Headache", "lasix" → "Furosemide").
 - 🔗 **Referential + temporal integrity** — orphan `USUBJID` dropped and asserted; `VISIT↔VISITNUM`
@@ -65,7 +71,13 @@ Hybrid AI by design — **Claude reasons, deterministic Python generates**:
 - 📱 **Ingest by file or URL** — paste a public protocol URL (mobile-friendly) or upload a file;
   precedence sample → URL → file, with downloaded temp files cleaned up after extraction.
 - ⚡ **Semantic caching** — SHA-256-keyed extraction cache; an identical protocol never pays for
-  extraction twice ($0 on a cache hit).
+  extraction twice ($0 on a cache hit). (Local/dev; disabled under the hosted ephemeral mode below.)
+- 🛡️ **Ephemeral (compliance) mode** — `PTD_EPHEMERAL=1` (on by default for the hosted
+  deployments) stores **nothing protocol-derived on the server**: no extraction cache, no `runs/`
+  history (the shared "previous runs" dropdown is hidden — it was a cross-session leak), and
+  generated data lands in a per-session temp dir swept after a few hours. Only the download ZIP
+  survives the session. Uploaded public protocols are processed as-is — the guarantee is about
+  server-side *retention*, not masking.
 - 🪙 **Cost observability** — live per-run token + `$` tracking in the UI and CLI.
 - 🔌 **MCP server + clean API** — `mcp_server.py` exposes extract / generate / validate as Model
   Context Protocol tools; the web app also exposes two typed HTTP endpoints —
@@ -115,9 +127,9 @@ the generated data and ask for charts. The UI
 reuses `run_loop` unchanged (presentation only) and is **live at
 [protocol-to-data.onrender.com](https://protocol-to-data.onrender.com)**.
 
-![protocol-to-data web UI — the narrated loop shows Claude extracting the design, hitting a
-validation failure (planned domain EG has no data) and self-repairing to PASS, with the live
-🪙 run-cost badge, the Databricks-ready export format, and the generated AE table showing
+![protocol-to-data web UI — the narrated loop shows the design being extracted, hitting a
+validation failure (a planned domain the builtin can't emit) and self-repairing to PASS, with the
+live 🪙 run-cost badge, the Databricks-ready export format, and the generated AE table showing
 MedDRA dictionary coding (AETERM "bad headache" → AEDECOD "Headache")](docs/img/ui_demo.png)
 
 ## Use via API
