@@ -44,6 +44,36 @@ cli._load_dotenv()
 
 SAMPLE = _ROOT / "examples" / "sample_protocol.md"
 
+# ---------------------------------------------------------------- ephemeral (compliance) mode
+# When on, a run stores NOTHING protocol-derived under the app dir: no extraction cache, no
+# runs/ history archive (so no cross-session exposure via the history dropdown), and the
+# generated data goes to a per-session OS-temp dir that is swept after a few hours. Only the
+# download ZIP survives the session. Default ON for hosted deployments (the Dockerfile sets
+# PTD_EPHEMERAL=1 → Render + ChetanNode); a local `python app.py` keeps today's persistence.
+_EPHEMERAL_PREFIX = "ptd_ephemeral_"
+_EPHEMERAL_MAX_AGE_S = 3 * 3600  # sweep a session's temp data after 3h of inactivity
+
+
+def _ephemeral() -> bool:
+    return os.environ.get("PTD_EPHEMERAL", "").strip().lower() in ("1", "true", "yes")
+
+
+def _sweep_ephemeral() -> None:
+    """Best-effort: delete stale per-session temp dirs (older than _EPHEMERAL_MAX_AGE_S)."""
+    import shutil
+    import time
+    root = Path(tempfile.gettempdir())
+    with contextlib.suppress(Exception):
+        for d in root.glob(f"{_EPHEMERAL_PREFIX}*"):
+            if d.is_dir() and (time.time() - d.stat().st_mtime) > _EPHEMERAL_MAX_AGE_S:
+                shutil.rmtree(d, ignore_errors=True)
+
+
+def _ephemeral_out_root() -> str:
+    """A fresh per-session output root under OS temp (nothing lands under the app dir)."""
+    _sweep_ephemeral()
+    return tempfile.mkdtemp(prefix=_EPHEMERAL_PREFIX)
+
 # Target export formats. Only SDTM is implemented; the EDC ODM-XML targets are demo stubs
 # that surface a roadmap notice and fall back to SDTM (no XML generation is built).
 EXPORT_SDTM = "SDTM (Parquet) - Databricks Analytics Ready"
@@ -75,11 +105,16 @@ def execute(protocol_path: str, subjects: int, seed: int, anomalies: int):
     def narrate(msg: str) -> None:
         q.put(msg)
 
+    ephemeral = _ephemeral()
+
     def worker() -> None:
         try:
             reset_usage()  # start this run's token/cost tally from zero
+            # Ephemeral (compliance) mode: write to a per-session OS-temp dir and skip the
+            # extraction cache, so nothing protocol-derived is stored under the app dir.
+            out_root = _ephemeral_out_root() if ephemeral else str(_ROOT / "data" / "output")
             res = run_loop(protocol_path, subjects=int(subjects), seed=int(seed),
-                           out_root=str(_ROOT / "data" / "output"), narrate=narrate)
+                           out_root=out_root, narrate=narrate, use_cache=not ephemeral)
             holder["result"] = res
             if int(anomalies) > 0:
                 narrate(f"\n🕵️  Injecting {int(anomalies)} anomalies (seed {seed}) ...")
@@ -92,18 +127,20 @@ def execute(protocol_path: str, subjects: int, seed: int, anomalies: int):
                     narrate(f"    • [{f.anomaly_type}] {f.domain}: {f.description}")
                 holder["score"] = score_detections(truth, findings)
             holder["usage"] = usage_summary()  # tokens + $ across extraction/repair/detection
-            # snapshot the completed run into runs/<timestamp>/ for the history dropdown
-            try:
-                score = holder.get("score")
-                run_dir = save_run(
-                    res.design, res.output_dir, subjects=int(subjects), seed=int(seed),
-                    scorecard_md=scorecard_markdown(score),
-                    caught=(score["caught"] if score else None),
-                    total=(score["total"] if score else None),
-                )
-                narrate(f"\n💾  Saved run → runs/{run_dir.name}")
-            except Exception:  # noqa: BLE001 — history is best-effort, never fail the run
-                pass
+            # snapshot the completed run into runs/<timestamp>/ for the history dropdown —
+            # SKIPPED in ephemeral mode (no server-side archive, no cross-session exposure).
+            if not ephemeral:
+                try:
+                    score = holder.get("score")
+                    run_dir = save_run(
+                        res.design, res.output_dir, subjects=int(subjects), seed=int(seed),
+                        scorecard_md=scorecard_markdown(score),
+                        caught=(score["caught"] if score else None),
+                        total=(score["total"] if score else None),
+                    )
+                    narrate(f"\n💾  Saved run → runs/{run_dir.name}")
+                except Exception:  # noqa: BLE001 — history is best-effort, never fail the run
+                    pass
         except Exception as e:  # noqa: BLE001 — surface any failure in the narration pane
             narrate(f"\n❌  Error: {type(e).__name__}: {e}")
         finally:
@@ -163,7 +200,13 @@ def _load_domain_csv(output_dir: str, domain: str):
 
 
 def _run_choices() -> list[tuple[str, str]]:
-    """(label, run_dir) pairs for the history dropdown, newest first."""
+    """(label, run_dir) pairs for the history dropdown, newest first.
+
+    Empty in ephemeral mode — runs aren't archived there, and a shared dropdown would be a
+    cross-session exposure of protocol-derived runs.
+    """
+    if _ephemeral():
+        return []
     return [(run_label(m), m["dir"]) for m in list_runs()]
 
 
@@ -555,7 +598,7 @@ def build_ui():
                                             elem_id="main_run_btn")
                         history_dd = gr.Dropdown(label="📁 Load a previous run",
                                                  choices=_run_choices(), value=None,
-                                                 interactive=True)
+                                                 interactive=True, visible=not _ephemeral())
                     with gr.Column(scale=2):
                         narration = gr.Textbox(label="Live agent narration", lines=10,
                                                max_lines=25, interactive=False, autoscroll=True)

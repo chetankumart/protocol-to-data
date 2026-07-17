@@ -137,6 +137,44 @@ def test_uploaded_path_normalizes_api_file_arg():
     assert app._uploaded_path(_FD()) == "/tmp/fd.pdf"
 
 
+def test_ephemeral_mode_isolates_storage(tmp_path, monkeypatch):
+    """In ephemeral mode execute() writes to a per-session OS-temp dir, disables the extraction
+    cache, and never archives to runs/ (no cross-session exposure)."""
+    import tempfile
+    from types import SimpleNamespace
+
+    from protocol_to_data.schemas import ProtocolDesign
+
+    monkeypatch.setenv("PTD_EPHEMERAL", "1")
+    assert app._ephemeral() is True
+    assert app._run_choices() == []          # history offered to nobody in ephemeral mode
+
+    captured = {}
+
+    def fake_run_loop(path, *, subjects, seed, out_root, narrate, use_cache):
+        captured["out_root"] = out_root
+        captured["use_cache"] = use_cache
+        out = Path(out_root) / "ZZZ" / "synthetic_data"
+        out.mkdir(parents=True)
+        (out / "dm.csv").write_text("STUDYID,USUBJID\nZZZ,ZZZ-1001\n")
+        design = ProtocolDesign(study_id="ZZZ")
+        return SimpleNamespace(design=design, output_dir=out,
+                               report=SimpleNamespace(passed=True))
+
+    save_calls = []
+    monkeypatch.setattr(app, "run_loop", fake_run_loop)
+    monkeypatch.setattr(app, "save_run", lambda *a, **k: save_calls.append(1))
+    monkeypatch.setattr(app, "reset_usage", lambda: None)
+    monkeypatch.setattr(app, "usage_summary", lambda: {})
+
+    final = [x for x in app.execute("proto.pdf", 5, 42, 0) if x[1]][-1][2]
+    assert captured["use_cache"] is False                       # cache disabled
+    assert captured["out_root"].startswith(tempfile.gettempdir())  # under OS temp, not the app dir
+    assert app._EPHEMERAL_PREFIX in captured["out_root"]
+    assert save_calls == []                                     # no runs/ archive written
+    assert "ZZZ" in final["output_dir"]
+
+
 def test_zip_run_bundles_or_none(tmp_path):
     import zipfile
     assert app._zip_run("") is None

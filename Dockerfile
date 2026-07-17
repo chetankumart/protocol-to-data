@@ -7,7 +7,11 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PYTHONPATH=/app/src \
     GRADIO_SERVER_NAME=0.0.0.0 \
-    GRADIO_SERVER_PORT=7860
+    GRADIO_SERVER_PORT=7860 \
+    PTD_EPHEMERAL=1
+# PTD_EPHEMERAL=1: hosted deployments store nothing protocol-derived on disk (no extraction
+# cache, no runs/ history, per-session temp output). A local `python app.py` leaves this unset
+# and keeps the convenient dev persistence. See app.py `_ephemeral`.
 
 WORKDIR /app
 
