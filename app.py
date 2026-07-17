@@ -374,18 +374,31 @@ def _zip_synthetic_data(out_dir: Path, study: str, design: dict) -> Path:
     return zip_path
 
 
-def _ui_download_zip(output_dir: str):
-    """UI ⬇ Download handler: zip the current run's output dir → a filepath the browser downloads.
-    Returns None (no download) if no run has produced data yet."""
+def _zip_run(output_dir: str | None) -> str | None:
+    """Build the downloadable SDTM ZIP for a completed run and return its path (or None).
+
+    Pre-built at run/load time and pushed straight into the DownloadButton's ``value`` so the
+    browser downloads on the FIRST click. (A lazy ``.click()`` handler does not work: a
+    DownloadButton downloads the value present *before* the click, so the handler that sets the
+    value only takes effect on the next click — the first click always no-ops.)
+    """
     if not output_dir or not Path(output_dir).exists():
         return None
     out = Path(output_dir)
-    design = {}
-    manifest = out.parent / "run_manifest.json"
+    if not any(out.glob("*.csv")):
+        return None
+    design, study = {}, out.parent.name
+    # study id + design live either in the parent run_manifest (live runs: data/output/<STUDY>/…)
+    # or in a design.json inside the run dir (saved runs: runs/<ts>/ — no parent manifest).
+    manifest, design_json = out.parent / "run_manifest.json", out / "design.json"
     if manifest.exists():
         with contextlib.suppress(Exception):
             design = json.loads(manifest.read_text()).get("design", {})
-    return str(_zip_synthetic_data(out, out.parent.name, design))
+    elif design_json.exists():
+        with contextlib.suppress(Exception):
+            design = json.loads(design_json.read_text())
+    study = design.get("study_id") or study
+    return str(_zip_synthetic_data(out, study, design))
 
 
 # High-contrast CTA styling so the primary "Run the loop" button pops out of the input column.
@@ -600,6 +613,7 @@ def build_ui():
                                 out_dir_state: extras["output_dir"],
                                 scorecard: f"{_SCORECARD_CAPTION}\n\n{extras['scorecard']}",
                                 data_df: _load_domain_csv(extras["output_dir"], domains[0] if domains else ""),
+                                download_btn: _zip_run(extras["output_dir"]),  # ready for a 1-click download
                                 history_dd: gr.update(choices=_run_choices()),  # surface the just-saved run
                                 usage_badge: extras["usage_badge"],
                             }
@@ -619,6 +633,7 @@ def build_ui():
                 out_dir_state: data["output_dir"],
                 scorecard: f"{_SCORECARD_CAPTION}\n\n{data['scorecard']}",
                 data_df: _load_domain_csv(data["output_dir"], domains[0] if domains else ""),
+                download_btn: _zip_run(data["output_dir"]),  # ready for a 1-click download
             }
 
         # UI event listeners are presentation-only — hide them from the public API docs
@@ -626,16 +641,17 @@ def build_ui():
         run_btn.click(on_run,
                       [file_in, use_sample, subjects, seed, anomalies, export_format, url_in],
                       [narration, design_code, crosscheck_md, domain_dd, out_dir_state, scorecard,
-                       data_df, history_dd, usage_badge], api_name=False)
+                       data_df, download_btn, history_dd, usage_badge], api_name=False)
         # A new run resets the Copilot session: clear BOTH the visible chatbot and ChatInterface's
         # internal chatbot_state (the history the 3-query counter is derived from) so
         # "run a new protocol to reset the Copilot" is literally true.
         run_btn.click(lambda: ([], []), None, [chat.chatbot, chat.chatbot_state], api_name=False)
         history_dd.change(on_load_run, [history_dd],
-                          [narration, design_code, domain_dd, out_dir_state, scorecard, data_df],
-                          api_name=False)
+                          [narration, design_code, domain_dd, out_dir_state, scorecard, data_df,
+                           download_btn], api_name=False)
         domain_dd.change(_load_domain_csv, [out_dir_state, domain_dd], data_df, api_name=False)
-        download_btn.click(_ui_download_zip, [out_dir_state], download_btn, api_name=False)
+        # No .click() handler on download_btn: its value is pre-built at run/load time (see _zip_run),
+        # so the browser downloads on the first click. A lazy handler would need a second click.
 
         # The ONLY documented API/MCP endpoints: clean, typed functions returning final artifacts.
         gr.api(api_run, api_name="generate_synthetic_data")

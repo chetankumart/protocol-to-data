@@ -137,14 +137,29 @@ def test_uploaded_path_normalizes_api_file_arg():
     assert app._uploaded_path(_FD()) == "/tmp/fd.pdf"
 
 
-def test_ui_download_zip_bundles_or_none(tmp_path):
+def test_zip_run_bundles_or_none(tmp_path):
     import zipfile
-    assert app._ui_download_zip("") is None
-    assert app._ui_download_zip(str(tmp_path / "missing")) is None
+    assert app._zip_run("") is None
+    assert app._zip_run(str(tmp_path / "missing")) is None
+    # a dir with no CSVs yields no download
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    assert app._zip_run(str(empty)) is None
+
+    # live-run layout: data/output/<STUDY>/synthetic_data + parent run_manifest.json
     out = tmp_path / "ZZZ" / "synthetic_data"
     out.mkdir(parents=True)
     (out / "dm.csv").write_text("USUBJID\nS-1\n")
     (out.parent / "run_manifest.json").write_text('{"design": {"study_id": "ZZZ"}}')
-    zp = app._ui_download_zip(str(out))
+    zp = app._zip_run(str(out))
     assert zp and zipfile.is_zipfile(zp)
-    assert "ZZZ/dm.csv" in zipfile.ZipFile(zp).namelist()
+    names = zipfile.ZipFile(zp).namelist()
+    assert "ZZZ/dm.csv" in names and "ZZZ/design.json" in names
+
+    # saved-run layout: runs/<ts>/ with a design.json inside (no parent manifest) → study id from it
+    saved = tmp_path / "runs" / "20260101_000000"
+    saved.mkdir(parents=True)
+    (saved / "dm.csv").write_text("USUBJID\nS-1\n")
+    (saved / "design.json").write_text('{"study_id": "SAVED-1"}')
+    zp2 = app._zip_run(str(saved))
+    assert zp2 and "SAVED-1/dm.csv" in zipfile.ZipFile(zp2).namelist()
