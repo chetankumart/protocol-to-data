@@ -175,6 +175,22 @@ def test_ephemeral_mode_isolates_storage(tmp_path, monkeypatch):
     assert "ZZZ" in final["output_dir"]
 
 
+def test_domain_dropdown_tolerates_stale_choices():
+    """The Domain dropdown's choices are populated per-run via gr.update(); it must accept a
+    selected value even when the server component's own choices are still empty (stale client
+    tab after a hosted restart), instead of raising 'not in the list of choices: []'."""
+    import gradio as gr
+
+    demo = app.build_ui()
+    domain_dds = [b for b in demo.blocks.values()
+                  if isinstance(b, gr.Dropdown) and getattr(b, "label", None) == "Domain"]
+    assert domain_dds, "Domain dropdown not found"
+    dd = domain_dds[0]
+    assert dd.allow_custom_value is True
+    # preprocess must not reject a value that isn't in the (empty) server-side choices
+    assert dd.preprocess("DM") == "DM"
+
+
 def test_zip_run_bundles_or_none(tmp_path):
     import zipfile
     assert app._zip_run("") is None

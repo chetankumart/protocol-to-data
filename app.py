@@ -609,7 +609,14 @@ def build_ui():
                 with gr.Accordion("🏛️ Registry Cross-Check", open=True):
                     crosscheck_md = gr.Markdown(_CROSSCHECK_IDLE)  # caption folded in (one block)
                 with gr.Accordion("🏭 Generated SDTM data", open=True):
-                    domain_dd = gr.Dropdown(label="Domain", choices=[], interactive=True)
+                    # allow_custom_value: the choices are populated dynamically per run via
+                    # gr.update(); if a client tab is stale relative to the server process (e.g.
+                    # after a hosted restart / redeploy), Gradio's preprocess would otherwise
+                    # reject the selected domain with "not in the list of choices: []". The value
+                    # is always a real domain stem used only to read a file (_load_domain_csv
+                    # returns empty if absent), so accepting it unconditionally is safe.
+                    domain_dd = gr.Dropdown(label="Domain", choices=[], interactive=True,
+                                            allow_custom_value=True)
                     data_df = gr.Dataframe(label="Preview (first 200 rows)", interactive=False,
                                            wrap=True)
                     download_btn = gr.DownloadButton("⬇ Download SDTM dataset (ZIP)", size="sm")
