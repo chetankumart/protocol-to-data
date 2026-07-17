@@ -24,5 +24,9 @@ USER appuser
 
 EXPOSE 7860
 
+# Liveness for Docker/Compose (and Portainer) — no curl in the slim image, so use stdlib urllib.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:7860/',timeout=4).status==200 else 1)" || exit 1
+
 # The ANTHROPIC_API_KEY is provided at runtime (env_file / -e), never baked into the image.
 ENTRYPOINT ["python", "app.py"]
