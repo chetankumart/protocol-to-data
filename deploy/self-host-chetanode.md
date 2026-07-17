@@ -33,8 +33,11 @@ bash deploy/chetanode-ssh.sh 'cd ~ && git clone https://github.com/chetankumart/
 # write a minimal server .env — ONLY the API key, piped over SSH, never printed
 printf 'ANTHROPIC_API_KEY=%s\n' "$(grep -E '^ANTHROPIC_API_KEY=' .env | cut -d= -f2-)" \
   | bash deploy/chetanode-ssh.sh 'umask 077; cat > ~/protocol-to-data/.env'
-# build + run on the HOST network (see below)
+# build + run on the HOST network (see below). GIT_COMMIT is derived from git so the page
+# footer's build marker always matches the deployed commit (the overlay's `environment:` maps it
+# in, overriding any stale value in .env).
 bash deploy/chetanode-ssh.sh 'cd ~/protocol-to-data &&
+  GIT_COMMIT=$(git rev-parse --short HEAD) \
   docker compose -f docker-compose.yml -f docker-compose.chetanode.yml up -d --build'
 # verify
 bash deploy/chetanode-ssh.sh 'curl -fsS http://localhost:7860/ >/dev/null && echo up; \
@@ -46,8 +49,10 @@ bridged container can't reach `api.anthropic.com` (`Network is unreachable`) —
 which restores egress *and* lets the host-network tunnel reach `localhost:7860`.
 `restart: unless-stopped` + a stdlib `HEALTHCHECK` are already set.
 
-> Optional: `echo "GIT_COMMIT=$(bash deploy/chetanode-ssh.sh 'cd ~/protocol-to-data && git rev-parse --short HEAD')"`
-> appended to the server `.env` makes the footer show the build SHA (verifiable deploys).
+> The page footer's build marker (`build \`<sha>\``) comes from the `GIT_COMMIT` the deploy
+> command exports — do **not** pin `GIT_COMMIT` in the server `.env` (it would go stale and the
+> footer would misreport the deployed commit). The overlay's `environment:` block overrides
+> `env_file`, so the git-derived value always wins.
 
 ## 2. Expose it via the Cloudflare Tunnel
 
@@ -78,7 +83,7 @@ curl -fsSI https://protocol-to-data.chetanlab.com  # 200 from the edge
 Open **https://protocol-to-data.chetanlab.com** — footer shows the build; run the bundled sample.
 
 ## Ops
-- **Update:** `git pull && docker compose up -d --build`
+- **Update:** `git fetch origin main && git reset --hard origin/main && GIT_COMMIT=$(git rev-parse --short HEAD) docker compose -f docker-compose.yml -f docker-compose.chetanode.yml up -d --build`
 - **Logs:** `docker compose logs -f` (or Portainer)
 - **Secret rotation:** edit `.env` → `docker compose up -d`
 - **Zero-downtime-ish:** Compose recreates the container; the tunnel reconnects automatically.

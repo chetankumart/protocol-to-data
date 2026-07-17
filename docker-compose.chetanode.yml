@@ -10,3 +10,9 @@ services:
   protocol-to-data:
     network_mode: host
     ports: !reset []        # host networking is incompatible with published ports; clear the base's
+    environment:
+      # Build marker for the page footer. Derived from git at deploy time (the deploy command
+      # exports GIT_COMMIT=$(git rev-parse --short HEAD)); this `environment` entry OVERRIDES the
+      # base compose's `env_file: .env`, so a stale GIT_COMMIT pinned in .env can no longer leak
+      # through. Falls back to 'local' if the deploy didn't export it.
+      - GIT_COMMIT=${GIT_COMMIT:-local}
