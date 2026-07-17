@@ -12,10 +12,12 @@ repo runs standalone for judges.
 
 from __future__ import annotations
 
+import json
 import random
 import re
 from datetime import date, timedelta
 from pathlib import Path
+from typing import Callable
 
 import pandas as pd
 
@@ -98,7 +100,6 @@ def generate_dataset(design: ProtocolDesign, *, subjects: int, seed: int,
 def _generate_builtin(design: ProtocolDesign, *, subjects: int, seed: int,
                       out_root: str | Path) -> Path:
     rng = random.Random(seed)
-    profile = _profile_for(design)
     out_dir = Path(out_root) / design.study_id / "synthetic_data"
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -106,29 +107,14 @@ def _generate_builtin(design: ProtocolDesign, *, subjects: int, seed: int,
     subs = _make_subjects(design, subjects, rng)
     frames: dict[str, pd.DataFrame] = {"dm": _gen_dm(design, subs)}
 
+    # Domains are dispatched through the registry (see _DOMAIN_GENERATORS). Its dict order is
+    # significant — it fixes the shared-RNG consumption sequence, so output stays byte-identical &
+    # reproducible. Adding a new life-sciences domain = one entry in that map.
     planned = set(design.domain_names())
-    if "VS" in planned:
-        frames["vs"] = _gen_vs(design, subs, rng)
-    if "LB" in planned:
-        lb = _gen_lb_oncology if profile == "oncology" else _gen_lb_cardiology
-        frames["lb"] = lb(design, subs, rng)
-    if "QS" in planned:
-        qs = _gen_qs_oncology if profile == "oncology" else _gen_qs_cardiology
-        frames["qs"] = qs(design, subs, rng)
-    if "RS" in planned:
-        frames["rs"] = _gen_rs(design, subs, rng)
-    if "AE" in planned:
-        frames["ae"] = _gen_ae(design, subs, rng, profile)
-    if "CM" in planned:
-        frames["cm"] = _gen_cm(design, subs, rng, profile)
-    if "EX" in planned:
-        frames["ex"] = _gen_ex(design, subs, profile)
-    # v2 depth — domains the repair loop used to delete. Placed last so they only consume the RNG
-    # (and only exist) when actually planned; existing domains' output is unchanged otherwise.
-    if "EG" in planned:
-        frames["eg"] = _gen_eg(design, subs, rng)
-    if "PC" in planned:
-        frames["pc"] = _gen_pc(design, subs, rng)
+    for dom, gen in _DOMAIN_GENERATORS.items():
+        if dom in planned:
+            frames[dom.lower()] = gen(design, subs, rng)
+    # TU/TR are a linked RECIST pair (shared per-subject lesion set) → generated together, last.
     if "TU" in planned or "TR" in planned:
         tu_rows, tr_rows = _gen_tumor(design, subs, rng)
         if "TU" in planned:
@@ -145,6 +131,7 @@ def _generate_builtin(design: ProtocolDesign, *, subjects: int, seed: int,
         if df.shape[1] == 0:
             continue
         df.to_csv(out_dir / f"{name}.csv", index=False)
+    _write_manifest(frames, out_dir)
     return out_dir
 
 
@@ -687,6 +674,59 @@ def _gen_ex(design: ProtocolDesign, subs: list[dict], profile: str) -> pd.DataFr
             "EXROUTE": route, "EXSTDTC": s["RFSTDTC"].isoformat(),
         })
     return pd.DataFrame(rows)
+
+
+# ------------------------------------------------------------------ domain registry (extensible)
+
+# Thin (design, subs, rng) adapters over the profile-/rng-signature generators, so every domain
+# has a uniform signature in the registry below.
+def _gen_lb(design: ProtocolDesign, subs: list[dict], rng: random.Random) -> pd.DataFrame:
+    fn = _gen_lb_oncology if _profile_for(design) == "oncology" else _gen_lb_cardiology
+    return fn(design, subs, rng)
+
+
+def _gen_qs(design: ProtocolDesign, subs: list[dict], rng: random.Random) -> pd.DataFrame:
+    fn = _gen_qs_oncology if _profile_for(design) == "oncology" else _gen_qs_cardiology
+    return fn(design, subs, rng)
+
+
+def _gen_ae_d(design: ProtocolDesign, subs: list[dict], rng: random.Random) -> pd.DataFrame:
+    return _gen_ae(design, subs, rng, _profile_for(design))
+
+
+def _gen_cm_d(design: ProtocolDesign, subs: list[dict], rng: random.Random) -> pd.DataFrame:
+    return _gen_cm(design, subs, rng, _profile_for(design))
+
+
+def _gen_ex_d(design: ProtocolDesign, subs: list[dict], rng: random.Random) -> pd.DataFrame:
+    return _gen_ex(design, subs, _profile_for(design))   # EX is deterministic (no rng)
+
+
+# domain code → generator. ORDER IS SIGNIFICANT: it fixes the shared-RNG consumption sequence, so
+# generation is byte-identical & reproducible. Add a new SDTM domain here in one line. (DM is always
+# first; TU/TR are a linked pair handled together in _generate_builtin.)
+_DomainGen = Callable[[ProtocolDesign, list, random.Random], pd.DataFrame]
+_DOMAIN_GENERATORS: dict[str, _DomainGen] = {
+    "VS": _gen_vs, "LB": _gen_lb, "QS": _gen_qs, "RS": _gen_rs,
+    "AE": _gen_ae_d, "CM": _gen_cm_d, "EX": _gen_ex_d, "EG": _gen_eg, "PC": _gen_pc,
+}
+
+
+def _write_manifest(frames: dict[str, pd.DataFrame], out_dir: Path) -> None:
+    """Emit a machine-readable dataset manifest (``dataset_manifest.json``, a define.json-lite) next
+    to the CSVs: per-domain row count, columns, and ``--TESTCD`` enumeration — so other life-sciences
+    workflows can introspect the output without opening every file. JSON, so the ``*.csv`` domain
+    readers ignore it. Deterministic (sorted codes) → reproducible."""
+    manifest: dict[str, dict] = {}
+    for name, df in frames.items():
+        if df.shape[1] == 0:
+            continue
+        entry: dict = {"rows": int(len(df)), "columns": list(df.columns)}
+        tc = next((c for c in df.columns if c.endswith("TESTCD")), None)
+        if tc is not None:
+            entry["testcodes"] = sorted(str(v) for v in df[tc].dropna().unique())
+        manifest[name.upper()] = entry
+    (out_dir / "dataset_manifest.json").write_text(json.dumps(manifest, indent=2))
 
 
 # --------------------------------------------------------------------------- engine bridge

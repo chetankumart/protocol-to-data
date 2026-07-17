@@ -136,3 +136,16 @@ def test_pc_generic_for_any_active_drug(tmp_path):
     assert not pc.empty
     assert set(pc["PCTESTCD"]) == {"BGBA317"}          # generic analyte from arm name
     assert validate_dataset(d, out).passed
+
+
+def test_dataset_manifest_is_written_and_introspectable(tmp_path):
+    import json
+    out = _dataset(tmp_path)
+    m = json.loads((out / "dataset_manifest.json").read_text())
+    # define.json-lite: per-domain rows + columns + --TESTCD enumeration
+    assert {"LB", "AE", "PC", "EG"} <= set(m)
+    assert m["LB"]["rows"] > 0 and "LBTESTCD" in m["LB"]["columns"]
+    assert "NEUT" in m["LB"]["testcodes"]
+    assert set(m["PC"]["testcodes"]) <= {"SOTORASIB", "DOCETAXEL"}
+    # JSON manifest is not mistaken for a domain (readers glob *.csv)
+    assert not (out / "dataset_manifest.csv").exists()
